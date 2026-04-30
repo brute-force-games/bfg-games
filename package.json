@@ -1,0 +1,20 @@
+{
+  "name": "acronym-game",
+  "private": true,
+  "workspaces": [
+    "platform/*"
+  ],
+  "scripts": {
+    "gen:gdscript": "node --import tsx scripts/gen-gdscript-types.ts",
+    "godot:check:tictactoe": "bash scripts/godot-check-tictactoe.sh",
+    "godot:export:tictactoe": "bash scripts/godot-export-tictactoe.sh",
+    "godot:export": "bash scripts/godot-export.sh",
+    "typecheck": "npm --workspaces run typecheck",
+    "test:e2e": "npm -w @brute-force-games/web run test:e2e"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.6",
+    "typescript": "^6.0.3"
+  }
+}
+

@@ -1,0 +1,29 @@
+.claude/
+claude/
+
+node_modules/
+dist/
+.wrangler/
+
+# VSCode / Cursor workspace settings (machine-specific)
+.vscode/settings.json
+
+# Godot (engine/editor generated)
+**/.godot/
+**/.import/
+**/*.import
+**/*.uid
+
+# Godot mono (if ever enabled)
+**/.mono/
+
+# Godot export output (we export into platform/web/public/godot/)
+platform/web/public/godot/
+
+# Playwright artifacts
+platform/web/test-results/
+platform/web/playwright-report/
+
+# Local scratch logs/artifacts
+tmp/godot-check/
+

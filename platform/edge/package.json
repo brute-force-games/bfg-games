@@ -1,0 +1,17 @@
+{
+  "name": "@brute-force-games/edge",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@brute-force-games/shared-types": "file:../shared-types"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260425.1",
+    "typescript": "^6.0.3",
+    "wrangler": "^4.85.0"
+  }
+}
+

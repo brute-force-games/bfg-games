@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Acronym Game</title>
+    <script>
+      // Companion to `public/404.html`: restore deep-link path/query on first load.
+      (function () {
+        var l = window.location;
+        var params = new URLSearchParams(l.search);
+        var p = params.get('p');
+        if (!p) return;
+
+        var q = params.get('q');
+        var h = params.get('h');
+        var restoredPath = p.startsWith('/') ? p : '/' + p;
+        var restoredSearch = q ? '?' + q : '';
+        var restoredHash = h ? decodeURIComponent(h) : l.hash;
+
+        // Remove the redirect params from the visible URL.
+        window.history.replaceState(null, '', restoredPath + restoredSearch + restoredHash);
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

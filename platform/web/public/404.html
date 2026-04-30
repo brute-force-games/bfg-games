@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Redirecting…</title>
+    <script>
+      // GitHub Pages SPA deep-link fallback.
+      // If the request is for "/<repo>/some/route?x=1", Pages serves 404.html.
+      // This script redirects to "/<repo>/?p=/some/route&q=x=1", and index.html restores it.
+      (function () {
+        var l = window.location;
+        var segmentCount = 1; // Project Pages: "/<repo>/"
+        var base = l.pathname
+          .split('/')
+          .slice(0, 1 + segmentCount)
+          .join('/');
+        var path = l.pathname.split('/').slice(1 + segmentCount).join('/');
+        var search = l.search ? l.search.slice(1) : '';
+        var newUrl =
+          base +
+          '/?p=/' +
+          encodeURIComponent(path) +
+          (search ? '&q=' + encodeURIComponent(search) : '') +
+          (l.hash ? '&h=' + encodeURIComponent(l.hash) : '');
+        l.replace(newUrl);
+      })();
+    </script>
+  </head>
+  <body></body>
+</html>

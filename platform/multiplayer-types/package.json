@@ -1,0 +1,17 @@
+{
+  "name": "@brute-force-games/multiplayer-types",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@brute-force-games/shared-types": "file:../shared-types"
+  }
+}
+

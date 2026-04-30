@@ -1,0 +1,6 @@
+name = "acronym-game-edge"
+main = "src/index.ts"
+compatibility_date = "2026-04-25"
+
+# Phase 1 uses TinyBase public demo DO server. This package is scaffold-only.
+
