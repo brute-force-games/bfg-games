@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TicTacToe Godot Stub</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        background: #fff;
+      }
+      .wrap {
+        padding: 12px;
+      }
+      .status {
+        color: #555;
+        margin-bottom: 10px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, 64px);
+        grid-template-rows: repeat(3, 64px);
+        gap: 8px;
+      }
+      button.cell {
+        border: 1px solid #ddd;
+        border-radius: 12px;
+        background: #fff;
+        font-size: 28px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      button.cell:disabled {
+        cursor: not-allowed;
+        opacity: 0.7;
+      }
+      .small {
+        margin-top: 10px;
+        font-size: 12px;
+        color: #777;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="status" id="status">Waiting for state…</div>
+      <div class="grid" id="grid"></div>
+      <div class="small">
+        Stub page for Playwright/CI. Protocol: `{ bfg: true, type, payload }` via `postMessage`.
+      </div>
+    </div>
+
+    <script>
+      const state = {
+        board: Array(9).fill(null),
+        currentPlayerId: null,
+        localPlayerId: null,
+        playerX: null,
+        playerO: null,
+        winnerId: null,
+        isDraw: false,
+        symbolByMark: { X: "X", O: "O" },
+      };
+
+      const grid = document.getElementById("grid");
+      const status = document.getElementById("status");
+
+      function render() {
+        status.textContent =
+          state.winnerId
+            ? `Winner: ${state.winnerId}`
+            : state.isDraw
+              ? "Draw"
+              : state.currentPlayerId
+                ? `Turn: ${state.currentPlayerId}${state.currentPlayerId === state.localPlayerId ? " (you)" : ""}`
+                : "Waiting for players…";
+        grid.innerHTML = "";
+        for (let i = 0; i < 9; i++) {
+          const btn = document.createElement("button");
+          btn.className = "cell";
+          const v = state.board[i];
+          btn.textContent = v ? (state.symbolByMark[v] ?? v) : "";
+          btn.addEventListener("click", () => {
+            parent.postMessage({ bfg: true, type: "ttt_player_move", payload: { cellIndex: i } }, "*");
+          });
+          grid.appendChild(btn);
+        }
+      }
+
+      window.addEventListener("message", (ev) => {
+        const data = ev.data;
+        if (!data || typeof data !== "object" || data.bfg !== true) return;
+        if (data.type === "ttt_state_init") {
+          Object.assign(state, data.payload || {});
+          state.winnerId = null;
+          state.isDraw = false;
+          render();
+        }
+        if (data.type === "ttt_move_made") {
+          const p = data.payload || {};
+          if (typeof p.cellIndex === "number" && (p.mark === "X" || p.mark === "O")) {
+            state.board[p.cellIndex] = p.mark;
+          }
+          render();
+        }
+        if (data.type === "ttt_game_over") {
+          const p = data.payload || {};
+          state.winnerId = p.winnerId ?? null;
+          state.isDraw = !!p.isDraw;
+          render();
+        }
+      });
+
+      // Boot handshake
+      parent.postMessage({ bfg: true, type: "godot_ready", payload: { game: "tictactoe", stub: true } }, "*");
+      render();
+    </script>
+  </body>
+</html>
+

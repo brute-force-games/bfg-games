@@ -17,8 +17,6 @@ dist/
 # Godot mono (if ever enabled)
 **/.mono/
 
-# Godot export output (we export into platform/web/public/godot/)
-platform/web/public/godot/
 
 # Playwright artifacts
 platform/web/test-results/
