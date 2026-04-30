@@ -337,9 +337,10 @@ function GodotBoard(props: {
   // We pin a timestamp for this mount so it doesn't thrash on re-renders, but
   // a hard refresh/new navigation will pull the latest export.
   const cacheBust = useMemo(() => (import.meta.env.DEV ? String(Date.now()) : ''), []);
+  const base = import.meta.env.BASE_URL.replace(/\/$/, '');
   const src = stub
-    ? '/godot/tictactoe/stub.html'
-    : `/godot/tictactoe/index.html${cacheBust ? `?v=${encodeURIComponent(cacheBust)}` : ''}`;
+    ? `${base}/godot/tictactoe/stub.html`
+    : `${base}/godot/tictactoe/index.html${cacheBust ? `?v=${encodeURIComponent(cacheBust)}` : ''}`;
 
   const parsedState = gameStatePublic ? zTicTacToeState.safeParse(gameStatePublic.state) : null;
   const isObserver =
