@@ -7,6 +7,7 @@
 export type {
   ConnectOptions,
   GameConfigJson,
+  GameExportV1,
   GameType,
   Player,
   Room,
@@ -40,6 +41,7 @@ import type {
   ConnectOptions,
   EncryptedPayload,
   Event as RoomEvent,
+  GameExportV1,
   GameStatePublic,
   GameStatePrivate,
   GameType,
@@ -126,8 +128,6 @@ export type HostLoopAction =
       publicPayload: unknown;
       /** Defaults to the submission's fromPlayerId, or selfPlayerId for host-driven actions. */
       fromPlayerId?: PlayerId;
-      /** Defaults to room.gameType. */
-      gameType?: GameType;
     }
   | {
       kind: 'gameStatePublic';
@@ -240,6 +240,12 @@ export interface RoomStore {
     gameType: GameType;
     kind: string;
   }): Promise<unknown>;
+
+  /**
+   * Assembles and signs a `GameExportV1` bundle from the local store.
+   * Host-only: throws if no host claim is held. Call after `room.status === 'finished'`.
+   */
+  exportGameRecord(opts: { appVersion: string; engineVersion: string }): Promise<GameExportV1>;
 
   // Host loops
   /**

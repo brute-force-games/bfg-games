@@ -14,13 +14,13 @@ export type GoFishRank = z.infer<typeof zGoFishRank>;
 export const GOFISH_RANKS = zGoFishRank.options as ReadonlyArray<GoFishRank>;
 
 export const zGoFishConfig = z.object({
-  minPlayers: z.number().int().min(2).max(4).default(2),
-  maxPlayers: z.number().int().min(2).max(4).default(4),
+  minPlayers: z.number().int().min(2).max(4),
+  maxPlayers: z.number().int().min(2).max(4),
   // Go Fish classic uses 7 cards for 2 players, 5 for 3–4.
   // We still keep it configurable for later experiments.
-  startingHandSize2p: z.number().int().min(1).max(13).default(7),
-  startingHandSize3pPlus: z.number().int().min(1).max(13).default(5),
-  mustHaveRankToAsk: z.literal(true).default(true)
+  startingHandSize2p: z.number().int().min(1).max(13),
+  startingHandSize3pPlus: z.number().int().min(1).max(13),
+  mustHaveRankToAsk: z.literal(true)
 });
 export type GoFishConfig = z.infer<typeof zGoFishConfig>;
 
@@ -39,7 +39,7 @@ export const zGoFishPublicState = z.object({
   turnPlayerId: zPlayerId.nullable(),
   deckCount: z.number().int().min(0),
   players: z.array(zGoFishPublicPlayer),
-  winnerPlayerIds: z.array(zPlayerId).default([])
+  winnerPlayerIds: z.array(zPlayerId)
 });
 export type GoFishPublicState = z.infer<typeof zGoFishPublicState>;
 

@@ -1,9 +1,12 @@
-import { Link } from '@tanstack/react-router';
+import { createFileRoute, Link } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
+import { type AvatarColor } from '@brute-force-games/shared-types';
 
 import { useSync } from '../sync/SyncContext';
 
-export function SettingsRoute() {
+export const Route = createFileRoute('/settings')({ component: SettingsRoute });
+
+function SettingsRoute() {
   const { preferences, updatePreferences } = useSync();
   const [displayName, setDisplayName] = useState(preferences.displayName);
   const [avatarColor, setAvatarColor] = useState(preferences.avatarColor);
@@ -33,7 +36,7 @@ export function SettingsRoute() {
         <label style={{ display: 'block' }}>
           <div style={{ fontSize: 12, color: '#666', marginBottom: 6 }}>Avatar color</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <input type="color" value={avatarColor} onChange={(e) => setAvatarColor(e.target.value)} />
+            <input type="color" value={avatarColor} onChange={(e) => setAvatarColor(e.target.value as AvatarColor)} />
             <div style={{ width: 28, height: 28, borderRadius: 999, background: avatarColor }} />
             <div style={{ color: '#555' }}>{displayName}</div>
           </div>

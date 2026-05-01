@@ -13,6 +13,7 @@
     "@brute-force-games/multiplayer-types": "file:../multiplayer-types",
     "@brute-force-games/shared-types": "file:../shared-types",
     "@tanstack/react-router": "^1.168.24",
+    "@tanstack/router-plugin": "^1.167.30",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "zod": "^4.3.6"
@@ -21,9 +22,8 @@
     "@playwright/test": "^1.55.0",
     "@types/react": "^19.1.4",
     "@types/react-dom": "^19.1.2",
-    "@vitejs/plugin-react": "^5.0.0",
+    "@vitejs/plugin-react": "^6.0.1",
     "typescript": "^6.0.3",
     "vite": "^8.0.10"
   }
 }
-

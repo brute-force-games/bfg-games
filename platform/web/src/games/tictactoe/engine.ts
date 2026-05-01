@@ -230,7 +230,7 @@ export const TicTacToeGameEngine = defineGameEngine({
   version: '1.0.0',
   configSchema: zTicTacToeConfig,
   stateSchema: zTicTacToeState,
-  defaultConfig: zTicTacToeConfig.parse({}),
+  defaultConfig: { symbolPair: 'xo' as const, ui: 'godot' as const },
   minPlayers: 2,
   maxPlayers: 2,
   ConfigUI,

@@ -15,7 +15,11 @@ import {
   requireHost,
   signEvent,
   signGameStatePublic,
+  signGameStateHistoryRow,
   signSubmission,
+  canonicalExportBytes,
+  signExport,
+  GAME_FINALIZED_KIND,
   signLobbyChatEvent,
   signLobbyChatSubmission,
   zChatEventId,
@@ -38,10 +42,12 @@ import {
   type EncryptedPayload,
   type Event as RoomEvent,
   type EventId,
+  type EventSeq,
   type EventsPrivate,
   type GameStateHistoryRow,
   type GameStatePrivate,
   type GameStatePublic,
+  type GameExportV1,
   type GameType,
   type LobbyChatEvent,
   type LobbyChatSubmission,
@@ -53,7 +59,9 @@ import {
   type RoomId,
   type SecretMessageIv,
   type Submission,
-  type SubmissionId
+  type SubmissionId,
+  type SubmissionNonce,
+  type UnixMs
 } from '@brute-force-games/shared-types';
 
 import type {
@@ -494,8 +502,8 @@ export class TinyBaseRoomStoreClient implements RoomStore {
   async submit(input: SubmitInput): Promise<SubmissionId> {
     const room = this.requireConnectedRoom();
     const id = makeSubmissionId();
-    const nonce = this.getNextSubmissionNonce();
-    const createdAt = 0;
+    const nonce = this.getNextSubmissionNonce() as SubmissionNonce;
+    const createdAt = 0 as UnixMs;
     const gameType = input.gameType ?? room.gameType;
     const fromPlayerId = this.identity.playerId;
 
@@ -551,8 +559,8 @@ export class TinyBaseRoomStoreClient implements RoomStore {
   async submitLobbyChatMessage(input: { text: string }): Promise<ChatSubmissionId> {
     const room = this.requireConnectedRoom();
     const id = makeChatSubmissionId();
-    const nonce = this.getNextSubmissionNonce();
-    const createdAt = Date.now();
+    const nonce = this.getNextSubmissionNonce() as SubmissionNonce;
+    const createdAt = Date.now() as UnixMs;
     const fromPlayerId = this.identity.playerId;
 
     const message = zLobbyChatMessage.parse({ text: input.text });
@@ -700,6 +708,68 @@ export class TinyBaseRoomStoreClient implements RoomStore {
     return next;
   }
 
+  async exportGameRecord(opts: {
+    appVersion: string;
+    engineVersion: string;
+  }): Promise<GameExportV1> {
+    this.requireHostForWrite('exportGameRecord');
+    const room = this.requireConnectedRoom();
+    const hostKeypair = this.requireHostKeypair();
+    const events = this.getEvents().sort((a, b) => a.seq - b.seq);
+    const players = this.getPlayers();
+
+    const finalizedEvent = events.find((e) => e.kind === GAME_FINALIZED_KIND);
+    const finalizedPayload = finalizedEvent?.publicPayload as
+      | { outcome?: string; winnerPlayerIds?: string[] }
+      | null
+      | undefined;
+
+    const startedAt = events[0]?.createdAt ?? (Date.now() as UnixMs);
+    const finishedAt = finalizedEvent?.createdAt ?? (Date.now() as UnixMs);
+    const outcome = (finalizedPayload?.outcome ?? 'abandoned') as 'win' | 'draw' | 'abandoned';
+    const winnerPlayerIds = finalizedPayload?.winnerPlayerIds ?? [];
+
+    const bundle: Omit<GameExportV1, 'exportSignature'> = {
+      exportVersion: 1,
+      exportedAt: Date.now() as UnixMs,
+      platform: {
+        appVersion: opts.appVersion,
+        gameType: room.gameType,
+        gameVersion: opts.engineVersion
+      },
+      room: {
+        roomId: room.id,
+        gameConfig: room.gameConfig,
+        seed: room.seed,
+        startedAt,
+        finishedAt,
+        outcome,
+        winnerPlayerIds
+      },
+      players: players.map((p) => ({
+        playerId: p.id,
+        displayName: p.displayName,
+        avatarColor: p.avatarColor,
+        role: p.role,
+        signingPubKey: p.signingPubKey,
+        encPubKey: p.encPubKey
+      })),
+      hostSigningPubKey: this.identity.signing.pub,
+      events: events.map((e) => ({
+        id: e.id,
+        seq: e.seq,
+        createdAt: e.createdAt,
+        kind: e.kind,
+        publicPayload: e.publicPayload,
+        fromPlayerId: e.fromPlayerId,
+        hostSignature: e.hostSignature
+      }))
+    };
+
+    const exportSignature = await signExport(this.identity.signing.privKey, bundle);
+    return { ...bundle, exportSignature };
+  }
+
   // Returns a host-side submission validator wired to this room. Throws if
   // the caller is not the host. The returned validator holds in-memory nonce
   // state — reuse one instance for the lifetime of a host session.
@@ -782,8 +852,8 @@ export class TinyBaseRoomStoreClient implements RoomStore {
   }
 
   async writeLobbyChatEvent(input: {
-    seq: number;
-    createdAt: number;
+    seq: EventSeq;
+    createdAt: UnixMs;
     fromPlayerId: PlayerId;
     text: string;
   }): Promise<LobbyChatEvent> {
@@ -817,21 +887,19 @@ export class TinyBaseRoomStoreClient implements RoomStore {
     this.requireHostForWrite('applyHostActions');
     const existingEvents = this.getEvents();
     const maxSeq = existingEvents.reduce((m, e) => (e.seq > m ? e.seq : m), -1);
-    let nextEventSeq = maxSeq + 1;
+    let nextEventSeq = (maxSeq + 1) as EventSeq;
 
     for (const action of actions) {
       switch (action.kind) {
         case 'event': {
-          const seq = nextEventSeq;
-          nextEventSeq++;
-          const eventSeq = seq;
+          const eventSeq = nextEventSeq;
+          nextEventSeq = (nextEventSeq + 1) as EventSeq;
           await this.writeEvent(
             await this.signedEvent({
               seq: eventSeq,
               eventKind: action.eventKind,
               publicPayload: action.publicPayload,
-              fromPlayerId: action.fromPlayerId ?? this.identity.playerId,
-              ...(action.gameType !== undefined ? { gameType: action.gameType } : {})
+              fromPlayerId: action.fromPlayerId ?? this.identity.playerId
             })
           );
           break;
@@ -839,7 +907,7 @@ export class TinyBaseRoomStoreClient implements RoomStore {
         case 'gameStatePublic': {
           // Snapshot reflects state through the most recently-issued event in
           // this batch. If no event was issued yet, use the previous max.
-          const seq = nextEventSeq - 1;
+          const seq = (nextEventSeq - 1) as EventSeq;
           await this.writeGameStatePublic(
             await this.signedGameStatePublic({ seq, state: action.state })
           );
@@ -849,14 +917,14 @@ export class TinyBaseRoomStoreClient implements RoomStore {
           // History rows align to the same seq convention as gameStatePublic:
           // the most recently-issued event in this batch (or the previous max
           // if no events were emitted).
-          const seq = nextEventSeq - 1;
+          const seq = (nextEventSeq - 1) as EventSeq;
           await this.writeGameStateHistoryRow(
-            zGameStateHistoryRow.parse({ id: String(seq), seq, state: action.state }) as GameStateHistoryRow
+            await this.signedGameStateHistoryRow({ seq, state: action.state })
           );
           break;
         }
         case 'gameStatePrivate': {
-          const seq = nextEventSeq - 1;
+          const seq = (nextEventSeq - 1) as EventSeq;
           const room = this.requireConnectedRoom();
           for (const item of action.perPlayer) {
             const enc = await this.encryptJsonToPlayerForGameStatePrivate({
@@ -1023,10 +1091,10 @@ export class TinyBaseRoomStoreClient implements RoomStore {
           const msg = await this.decryptLobbyChatSubmissionForHost(s);
           const existing = this.getLobbyChatEvents();
           const maxSeq = existing.reduce((m, e) => (e.seq > m ? e.seq : m), -1);
-          const seq = maxSeq + 1;
+          const seq = (maxSeq + 1) as EventSeq;
           await this.writeLobbyChatEvent({
             seq,
-            createdAt: Date.now(),
+            createdAt: Date.now() as UnixMs,
             fromPlayerId: s.fromPlayerId,
             text: msg.text
           });
@@ -1047,18 +1115,15 @@ export class TinyBaseRoomStoreClient implements RoomStore {
   // ─── Internal ───────────────────────────────────────────────────────────
 
   private async signedEvent(opts: {
-    seq: number;
+    seq: EventSeq;
     eventKind: string;
     publicPayload: unknown;
     fromPlayerId: PlayerId;
-    gameType?: GameType;
   }): Promise<RoomEvent> {
-    const room = this.requireConnectedRoom();
     const unsigned: Omit<RoomEvent, 'hostSignature'> = {
       id: makeEventId(),
       seq: opts.seq,
-      createdAt: Date.now(),
-      gameType: opts.gameType ?? room.gameType,
+      createdAt: Date.now() as UnixMs,
       kind: opts.eventKind,
       publicPayload: opts.publicPayload,
       fromPlayerId: opts.fromPlayerId
@@ -1067,8 +1132,17 @@ export class TinyBaseRoomStoreClient implements RoomStore {
     return zEvent.parse({ ...unsigned, hostSignature }) as RoomEvent;
   }
 
+  private async signedGameStateHistoryRow(opts: {
+    seq: EventSeq;
+    state: unknown;
+  }): Promise<GameStateHistoryRow> {
+    const unsigned = { id: String(opts.seq), seq: opts.seq, state: opts.state };
+    const hostSignature = await signGameStateHistoryRow(this.identity, unsigned);
+    return zGameStateHistoryRow.parse({ ...unsigned, hostSignature }) as GameStateHistoryRow;
+  }
+
   private async signedGameStatePublic(opts: {
-    seq: number;
+    seq: EventSeq;
     state: unknown;
   }): Promise<GameStatePublic> {
     const unsigned = {

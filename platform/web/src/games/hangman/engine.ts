@@ -8,7 +8,8 @@ import {
   zHangmanHostPrivateState,
   zHangmanPublicState,
   type HangmanConfig,
-  type HangmanPublicState
+  type HangmanPublicState,
+  type Letter
 } from '@brute-force-games/shared-types';
 
 import type { HostLoopAction, PlayerId } from '@brute-force-games/multiplayer-types';
@@ -31,7 +32,7 @@ const HANGMAN_GAME_TYPE = 'hangman';
 export const HANGMAN_PRIVATE_KIND = 'hangman/state_private_v1' as const;
 
 // Frequency-ordered letters for autoPlay
-const LETTER_FREQUENCY = 'ETAOINSRHLDCUMFPGWYBVKXJQZ'.split('');
+const LETTER_FREQUENCY = 'ETAOINSRHLDCUMFPGWYBVKXJQZ'.split('') as Letter[];
 
 const WORD_LIST = [
   'APPLE', 'BEACH', 'CLOUD', 'DANCE', 'EAGLE',
@@ -146,8 +147,9 @@ async function applySubmissionV1(
   }
   if (!submission || submission.kind !== HANGMAN_SUBMIT_GUESS) return null;
 
-  const letter = submission.letter?.toUpperCase();
-  if (!letter || !/^[A-Z]$/.test(letter)) return null;
+  const letterRaw = submission.letter?.toUpperCase();
+  if (!letterRaw || !/^[A-Z]$/.test(letterRaw)) return null;
+  const letter = letterRaw as Letter;
 
   const snap = ctx.store.getGameStatePublicOrNull();
   const parsedPublic = snap ? zHangmanPublicState.safeParse(snap.state) : null;
@@ -333,7 +335,7 @@ export const HangmanGameEngine = defineGameEngine({
   version: '1.0.0',
   configSchema: zHangmanConfig,
   stateSchema: zHangmanPublicState,
-  defaultConfig: zHangmanConfig.parse({}),
+  defaultConfig: { maxWrongGuesses: 6 },
   minPlayers: 2,
   maxPlayers: 8,
   ConfigUI,

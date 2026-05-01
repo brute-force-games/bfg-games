@@ -1,4 +1,5 @@
 import react from '@vitejs/plugin-react';
+import { TanStackRouterVite } from '@tanstack/router-plugin/vite';
 import { defineConfig } from 'vite';
 
 function computeBase(): string {
@@ -9,7 +10,10 @@ function computeBase(): string {
 }
 
 export default defineConfig(({ mode }) => ({
-  plugins: [react()],
+  plugins: [
+    TanStackRouterVite({ routesDirectory: './src/routes', generatedRouteTree: './src/routeTree.gen.ts' }),
+    react()
+  ],
   base: mode === 'production' ? computeBase() : '/',
   server: {
     port: 5173

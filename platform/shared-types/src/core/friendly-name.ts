@@ -1,4 +1,5 @@
 import { bytesToB64Url } from './encoding';
+import { type AvatarColor, type DisplayName } from './schemas';
 
 // Simple, readable, non-offensive-ish handle generator.
 // Format: Adj-Noun-#### (4 digits)
@@ -53,7 +54,7 @@ function pick<T>(arr: readonly T[], n: number): T {
   return arr[Math.floor(n % arr.length)]!;
 }
 
-export function generateFriendlyName(seedBytes?: Uint8Array): string {
+export function generateFriendlyName(seedBytes?: Uint8Array): DisplayName {
   const bytes = seedBytes ?? (() => {
     const b = new Uint8Array(16);
     crypto.getRandomValues(b);
@@ -70,7 +71,7 @@ export function generateFriendlyName(seedBytes?: Uint8Array): string {
   return `${adj}-${noun}-${digits}`;
 }
 
-export function deriveColorHex(seedBytes?: Uint8Array): string {
+export function deriveColorHex(seedBytes?: Uint8Array): AvatarColor {
   const bytes = seedBytes ?? (() => {
     const b = new Uint8Array(16);
     crypto.getRandomValues(b);
@@ -82,7 +83,7 @@ export function deriveColorHex(seedBytes?: Uint8Array): string {
   const b = 80 + (bytes[2]! % 150);
   return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b
     .toString(16)
-    .padStart(2, '0')}`;
+    .padStart(2, '0')}` as AvatarColor;
 }
 
 export function seedFromPlayerId(playerId: string): Uint8Array {

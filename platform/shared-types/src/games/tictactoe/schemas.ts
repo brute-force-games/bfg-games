@@ -8,8 +8,8 @@ export const zTicTacToeUiImplementation = z.enum(['godot', 'react']);
 export type TicTacToeUiImplementation = z.infer<typeof zTicTacToeUiImplementation>;
 
 export const zTicTacToeConfig = z.object({
-  symbolPair: zTicTacToeSymbolPair.default('xo'),
-  ui: zTicTacToeUiImplementation.default('godot')
+  symbolPair: zTicTacToeSymbolPair,
+  ui: zTicTacToeUiImplementation
 });
 export type TicTacToeConfig = z.infer<typeof zTicTacToeConfig>;
 

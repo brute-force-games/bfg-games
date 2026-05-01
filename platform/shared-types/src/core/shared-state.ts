@@ -14,7 +14,15 @@ import {
   zSecretMessageIv,
   zSignature
 } from './keys';
-import { zGameType } from './schemas';
+import { zGameType, zUnixMs } from './schemas';
+
+// Monotonic per-room event sequence counter
+export const zEventSeq = z.number().int().min(0).brand<'EventSeq'>();
+export type EventSeq = z.infer<typeof zEventSeq>;
+
+// Monotonic per-player submission nonce for replay protection
+export const zSubmissionNonce = z.number().int().min(0).brand<'SubmissionNonce'>();
+export type SubmissionNonce = z.infer<typeof zSubmissionNonce>;
 
 // ─── submissions: player → host (encrypted) ─────────────────────────────────
 // A player's intended move, encrypted to the host's per-room X25519 pubkey.
@@ -29,8 +37,8 @@ export const zSubmission = z.object({
   toHostCiphertext: zEncryptedPayload,
   iv: zSecretMessageIv,
   signature: zSignature,
-  nonce: z.number().int().min(0),
-  createdAt: z.number().int().min(0),
+  nonce: zSubmissionNonce,
+  createdAt: zUnixMs,
   gameType: zGameType,
   // Per-game submission discriminator. Per-game packages refine the decrypted
   // plaintext via their own discriminated unions keyed on `kind`.
@@ -41,7 +49,7 @@ export type Submission = z.infer<typeof zSubmission>;
 // ─── events: host → everyone (canonical history) ────────────────────────────
 // Append-only log of host-validated actions. `seq` is monotonic per room and
 // drives deterministic replay. `hostSignature` is the host's Ed25519 signature
-// over the canonical bytes (`id || seq || createdAt || gameType || kind ||
+// over the canonical bytes (`id || seq || createdAt || kind ||
 // JSON(publicPayload) || fromPlayerId`) so clients can verify host authority
 // without server enforcement (pre-Phase 9).
 //
@@ -49,9 +57,8 @@ export type Submission = z.infer<typeof zSubmission>;
 // their own per-`kind` schemas.
 export const zEvent = z.object({
   id: zEventId,
-  seq: z.number().int().min(0),
-  createdAt: z.number().int().min(0),
-  gameType: zGameType,
+  seq: zEventSeq,
+  createdAt: zUnixMs,
   kind: z.string().min(1),
   publicPayload: z.unknown(),
   fromPlayerId: zPlayerId.nullable(),
@@ -92,7 +99,7 @@ export type SingletonPublicStateId = typeof SINGLETON_PUBLIC_STATE_ID;
 
 export const zGameStatePublic = z.object({
   id: z.literal(SINGLETON_PUBLIC_STATE_ID),
-  seq: z.number().int().min(0),
+  seq: zEventSeq,
   state: z.unknown(),
   hostSignature: zSignature
 });
@@ -105,8 +112,12 @@ export type GameStatePublic = z.infer<typeof zGameStatePublic>;
 export const zGameStateHistoryRow = z.object({
   // Row id is the seq encoded as a string (TinyBase row ids are strings).
   id: z.string().min(1),
-  seq: z.number().int().min(0),
-  state: z.unknown()
+  seq: zEventSeq,
+  state: z.unknown(),
+  // Host Ed25519 signature over (domain || id || seq || JSON(state)).
+  // Optional so rows written before this field was added still parse cleanly;
+  // the verifier treats absent/empty as unverified.
+  hostSignature: zSignature.optional()
 });
 export type GameStateHistoryRow = z.infer<typeof zGameStateHistoryRow>;
 
@@ -121,7 +132,7 @@ export type GameStateHistoryRow = z.infer<typeof zGameStateHistoryRow>;
 export const zGameStatePrivatePlain = z.object({
   id: zPlayerId,
   kind: z.literal('plain'),
-  seq: z.number().int().min(0),
+  seq: zEventSeq,
   state: z.unknown()
 });
 export type GameStatePrivatePlain = z.infer<typeof zGameStatePrivatePlain>;
@@ -129,7 +140,7 @@ export type GameStatePrivatePlain = z.infer<typeof zGameStatePrivatePlain>;
 export const zGameStatePrivateEncrypted = z.object({
   id: zPlayerId,
   kind: z.literal('encrypted'),
-  seq: z.number().int().min(0),
+  seq: zEventSeq,
   ciphertext: zEncryptedPayload,
   iv: zSecretMessageIv
 });
@@ -140,3 +151,16 @@ export const zGameStatePrivate = z.discriminatedUnion('kind', [
   zGameStatePrivateEncrypted
 ]);
 export type GameStatePrivate = z.infer<typeof zGameStatePrivate>;
+
+// ─── Framework finalization event ────────────────────────────────────────────
+// Emitted by the host immediately after the last game event when the room
+// transitions to `finished`. Its presence + valid signature is the canonical
+// end-of-record marker for the event log.
+export const GAME_FINALIZED_KIND = 'game/finalized' as const;
+
+export const zGameFinalizedPayload = z.object({
+  kind: z.literal(GAME_FINALIZED_KIND),
+  outcome: z.enum(['win', 'draw', 'abandoned']),
+  winnerPlayerIds: z.array(zPlayerId)
+});
+export type GameFinalizedPayload = z.infer<typeof zGameFinalizedPayload>;

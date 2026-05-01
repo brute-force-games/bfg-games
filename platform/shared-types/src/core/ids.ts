@@ -10,6 +10,7 @@ export const PREFIX = {
   event: 'evt',
   eventsPrivate: 'epvt',
   chatSubmission: 'csub',
+  inviteCode: 'ivc',
   chatEvent: 'cevt'
 } as const;
 
@@ -78,4 +79,10 @@ export const zChatEventId = z
   .refine((s) => hasPrefix(PREFIX.chatEvent, s), 'Invalid ChatEventId')
   .brand<'ChatEventId'>();
 export type ChatEventId = z.infer<typeof zChatEventId>;
+
+export const zInviteCode = z
+  .string()
+  .refine((s) => hasPrefix(PREFIX.inviteCode, s), 'Invalid InviteCode')
+  .brand<'InviteCode'>();
+export type InviteCode = z.infer<typeof zInviteCode>;
 

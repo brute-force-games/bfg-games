@@ -593,7 +593,13 @@ export const GoFishGameEngine = defineGameEngine({
   version: '1.0.0',
   configSchema: zGoFishConfig,
   stateSchema: zGoFishPublicState,
-  defaultConfig: zGoFishConfig.parse({}),
+  defaultConfig: {
+    minPlayers: 2,
+    maxPlayers: 4,
+    startingHandSize2p: 7,
+    startingHandSize3pPlus: 5,
+    mustHaveRankToAsk: true as const
+  },
   minPlayers: 2,
   maxPlayers: 4,
   ConfigUI,

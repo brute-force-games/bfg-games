@@ -15,6 +15,8 @@ import {
   type SigningPubKeyBytes
 } from './keys';
 import { zChatEventId, zChatSubmissionId, zPlayerId, type ChatEventId, type ChatSubmissionId } from './ids';
+import { zUnixMs, type UnixMs } from './schemas';
+import { zEventSeq, zSubmissionNonce, type SubmissionNonce } from './shared-state';
 
 // Uses the same WebCrypto primitives as game submissions, but dedicated domains
 // so lobby chat keys/signatures cannot be confused with game protocols.
@@ -58,16 +60,16 @@ export const zLobbyChatSubmission = z
     toHostCiphertext: zEncryptedPayload,
     iv: zSecretMessageIv,
     signature: zSignature,
-    nonce: z.number().int().min(0),
-    createdAt: z.number().int().min(0)
+    nonce: zSubmissionNonce,
+    createdAt: zUnixMs
   });
 export type LobbyChatSubmission = z.infer<typeof zLobbyChatSubmission>;
 
 export const zLobbyChatEvent = z
   .object({
     id: zChatEventId,
-    seq: z.number().int().min(0),
-    createdAt: z.number().int().min(0),
+    seq: zEventSeq,
+    createdAt: zUnixMs,
     fromPlayerId: zPlayerId,
     text: z.string().min(1).max(500),
     hostSignature: zSignature
@@ -78,8 +80,8 @@ export type LobbyChatEvent = z.infer<typeof zLobbyChatEvent>;
 
 export type LobbyChatSubmissionSignableFields = {
   fromPlayerId: PlayerId;
-  createdAt: number;
-  nonce: number;
+  createdAt: UnixMs;
+  nonce: SubmissionNonce;
   iv: SecretMessageIv;
   toHostCiphertext: EncryptedPayload;
   hostEncPubKey: GameEncPubKeyBytes;

@@ -1,14 +1,16 @@
-import { Link, useNavigate } from '@tanstack/react-router';
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
 
-import { zGameType } from '@brute-force-games/shared-types';
+import { generateRoomSeed, zGameType } from '@brute-force-games/shared-types';
 
 import { parseInviteInput } from '../utils/invite';
 import { useRoomsIndex, useSync } from '../sync/SyncContext';
 
+export const Route = createFileRoute('/')({ component: IndexRoute });
+
 const DEFAULT_GAME_TYPE = zGameType.parse('tictactoe');
 
-export function IndexRoute() {
+function IndexRoute() {
   const navigate = useNavigate();
   const [joinInput, setJoinInput] = useState('');
   const roomsIndex = useRoomsIndex();
@@ -21,7 +23,10 @@ export function IndexRoute() {
     <div style={{ maxWidth: 720, margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
         <h1 style={{ margin: 0 }}>Acronym Game</h1>
-        <Link to="/settings">Settings</Link>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <Link to="/review">Review</Link>
+          <Link to="/settings">Settings</Link>
+        </div>
       </div>
 
       <div style={{ marginTop: 16, padding: 16, border: '1px solid #ddd', borderRadius: 12 }}>
@@ -37,7 +42,8 @@ export function IndexRoute() {
             void (async () => {
               try {
                 const { roomId, invite } = await createHostedRoom({
-                  defaultGameType: DEFAULT_GAME_TYPE
+                  defaultGameType: DEFAULT_GAME_TYPE,
+                  seed: generateRoomSeed()
                 });
                 void navigate({ to: '/room/$roomId/play', params: { roomId }, search: { invite } });
               } finally {

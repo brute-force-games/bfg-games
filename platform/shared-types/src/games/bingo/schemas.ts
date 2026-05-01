@@ -25,7 +25,7 @@ export const BINGO_WIN_LINES: readonly (readonly number[])[] = [
 ];
 
 export const zBingoConfig = z.object({
-  maxPlayers: z.number().int().min(2).max(8).default(8)
+  maxPlayers: z.number().int().min(2).max(8)
 });
 export type BingoConfig = z.infer<typeof zBingoConfig>;
 

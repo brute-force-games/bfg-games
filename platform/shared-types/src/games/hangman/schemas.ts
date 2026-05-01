@@ -2,16 +2,28 @@ import { z } from 'zod';
 
 import { zPlayerId } from '../../core/ids';
 
+// A single alphabetic character used as a guess or in the masked word display
+export const zLetter = z.string().length(1).brand<'Letter'>();
+export type Letter = z.infer<typeof zLetter>;
+
+// A single character in the masked word — either a revealed letter or a blank marker
+export const zMaskedChar = z.string().length(1);
+export type MaskedChar = z.infer<typeof zMaskedChar>;
+
+// The secret word chosen by the host
+export const zHangmanWord = z.string().min(1).brand<'HangmanWord'>();
+export type HangmanWord = z.infer<typeof zHangmanWord>;
+
 export const zHangmanConfig = z.object({
-  maxWrongGuesses: z.number().int().min(1).max(10).default(6)
+  maxWrongGuesses: z.number().int().min(1).max(10)
 });
 export type HangmanConfig = z.infer<typeof zHangmanConfig>;
 
 export const zHangmanPublicState = z.object({
   phase: z.enum(['active', 'finished']),
   turnPlayerId: zPlayerId.nullable(),
-  maskedWord: z.array(z.string()),
-  guessedLetters: z.array(z.string()),
+  maskedWord: z.array(zMaskedChar),
+  guessedLetters: z.array(zLetter),
   wrongGuesses: z.number().int().min(0),
   maxWrongGuesses: z.number().int().min(1),
   wordLength: z.number().int().min(1),
@@ -21,7 +33,7 @@ export const zHangmanPublicState = z.object({
 export type HangmanPublicState = z.infer<typeof zHangmanPublicState>;
 
 export const zHangmanHostPrivateState = z.object({
-  word: z.string()
+  word: zHangmanWord
 });
 export type HangmanHostPrivateState = z.infer<typeof zHangmanHostPrivateState>;
 
@@ -31,7 +43,7 @@ export const HANGMAN_SUBMIT_GUESS = 'hangman/guess' as const;
 
 export const zHangmanGuessSubmission = z.object({
   kind: z.literal(HANGMAN_SUBMIT_GUESS),
-  letter: z.string().length(1)
+  letter: zLetter
 });
 export type HangmanGuessSubmission = z.infer<typeof zHangmanGuessSubmission>;
 
@@ -54,16 +66,16 @@ export const zHangmanStartedPublic = z.object({
 export const zHangmanGuessedPublic = z.object({
   kind: z.literal(HANGMAN_EVT_GUESSED),
   playerId: zPlayerId,
-  letter: z.string().length(1),
+  letter: zLetter,
   correct: z.boolean(),
   wrongGuesses: z.number().int().min(0),
-  maskedWord: z.array(z.string())
+  maskedWord: z.array(zMaskedChar)
 });
 
 export const zHangmanGameOverPublic = z.object({
   kind: z.literal(HANGMAN_EVT_GAME_OVER),
   outcome: z.enum(['win', 'lose']),
-  word: z.string()
+  word: zHangmanWord
 });
 
 export const zHangmanEventPublicPayload = z.discriminatedUnion('kind', [

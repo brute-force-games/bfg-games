@@ -1,9 +1,10 @@
 import { z } from 'zod';
+import { zAvatarColor, zDisplayName } from './schemas';
 
 export const zPreferencesV1 = z.object({
   version: z.literal(1),
-  displayName: z.string().min(1),
-  avatarColor: z.string().regex(/^#[0-9a-fA-F]{6}$/)
+  displayName: zDisplayName,
+  avatarColor: zAvatarColor
 });
 export type PreferencesV1 = z.infer<typeof zPreferencesV1>;
 

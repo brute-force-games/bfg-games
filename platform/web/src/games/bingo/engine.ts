@@ -408,7 +408,7 @@ export const BingoGameEngine = defineGameEngine({
   version: '1.0.0',
   configSchema: zBingoConfig,
   stateSchema: zBingoPublicState,
-  defaultConfig: zBingoConfig.parse({}),
+  defaultConfig: { maxPlayers: 8 },
   minPlayers: 2,
   // Absolute ceiling; Bingo config may further constrain within this.
   maxPlayers: 8,

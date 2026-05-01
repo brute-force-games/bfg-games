@@ -10,6 +10,7 @@ export * from './core/store';
 export * from './core/submissions';
 export * from './core/write-policy';
 export * from './core/host-signatures';
+export * from './core/game-export';
 export * from './core/lobby-chat';
 export * from './core/friendly-name';
 export * from './core/preferences';

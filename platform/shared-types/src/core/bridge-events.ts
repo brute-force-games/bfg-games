@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { zPlayerId, zRoomId } from './ids';
-import { zGameType } from './schemas';
+import { zAvatarColor, zDisplayName, zGameType } from './schemas';
 
 export const EVT_LOBBY_INIT = 'lobby_init' as const;
 export const EVT_PLAYER_JOINED = 'player_joined' as const;
@@ -26,8 +26,8 @@ export type LobbyInitPayload = z.infer<typeof zLobbyInitPayload>;
 
 export const zPlayerJoinedPayload = z.object({
   playerId: zPlayerId,
-  displayName: z.string(),
-  avatarColor: z.string(),
+  displayName: zDisplayName,
+  avatarColor: zAvatarColor,
   role: z.enum(['host', 'player', 'observer'])
 });
 export type PlayerJoinedPayload = z.infer<typeof zPlayerJoinedPayload>;

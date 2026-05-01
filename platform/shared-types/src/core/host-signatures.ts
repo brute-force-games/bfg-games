@@ -3,10 +3,11 @@ import { z } from 'zod';
 import { b64UrlToBytes, bytesToB64Url } from './encoding';
 import type { LoadedPlayerIdentity } from './identity';
 import { zSignature, type Signature } from './keys';
-import type { Event, GameStatePublic } from './shared-state';
+import type { Event, GameStateHistoryRow, GameStatePublic } from './shared-state';
 
 const EVENT_DOMAIN = 'event_v1';
 const STATE_PUBLIC_DOMAIN = 'state_public_v1';
+const STATE_HISTORY_DOMAIN = 'state_history_v1';
 
 function lengthPrefixed(parts: ReadonlyArray<string | number>): Uint8Array<ArrayBuffer> {
   const encoder = new TextEncoder();
@@ -34,7 +35,6 @@ export function canonicalEventBytes(e: Omit<Event, 'hostSignature'>): Uint8Array
     e.id,
     e.seq,
     e.createdAt,
-    e.gameType,
     e.kind,
     JSON.stringify(e.publicPayload),
     e.fromPlayerId ?? 'null'
@@ -62,6 +62,21 @@ export async function signGameStatePublic(
   return zSignature.parse(bytesToB64Url(new Uint8Array(sigBuffer)));
 }
 
+export function canonicalGameStateHistoryBytes(
+  row: Omit<GameStateHistoryRow, 'hostSignature'>
+): Uint8Array<ArrayBuffer> {
+  return lengthPrefixed([STATE_HISTORY_DOMAIN, row.id, row.seq, JSON.stringify(row.state)]);
+}
+
+export async function signGameStateHistoryRow(
+  identity: LoadedPlayerIdentity,
+  row: Omit<GameStateHistoryRow, 'hostSignature'>
+): Promise<Signature> {
+  const canonical = canonicalGameStateHistoryBytes(row);
+  const sigBuffer = await crypto.subtle.sign('Ed25519', identity.signing.privKey, canonical);
+  return zSignature.parse(bytesToB64Url(new Uint8Array(sigBuffer)));
+}
+
 async function importEd25519Pub(pub: string): Promise<CryptoKey> {
   return crypto.subtle.importKey('raw', b64UrlToBytes(pub), { name: 'Ed25519' }, false, ['verify']);
 }
@@ -72,12 +87,22 @@ export async function verifyEventSignature(hostSigningPubKey: string, e: Event):
     id: e.id,
     seq: e.seq,
     createdAt: e.createdAt,
-    gameType: e.gameType,
     kind: e.kind,
     publicPayload: e.publicPayload,
     fromPlayerId: e.fromPlayerId
   });
   const sigBytes = b64UrlToBytes(e.hostSignature);
+  return crypto.subtle.verify('Ed25519', pub, sigBytes, canonical);
+}
+
+export async function verifyGameStateHistorySignature(
+  hostSigningPubKey: string,
+  row: GameStateHistoryRow
+): Promise<boolean> {
+  if (!row.hostSignature) return false;
+  const pub = await importEd25519Pub(hostSigningPubKey);
+  const canonical = canonicalGameStateHistoryBytes({ id: row.id, seq: row.seq, state: row.state });
+  const sigBytes = b64UrlToBytes(row.hostSignature);
   return crypto.subtle.verify('Ed25519', pub, sigBytes, canonical);
 }
 

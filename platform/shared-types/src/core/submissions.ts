@@ -9,8 +9,8 @@ import {
   type Signature,
   type SigningPubKeyBytes
 } from './keys';
-import type { GameType } from './schemas';
-import type { Submission } from './shared-state';
+import type { GameType, UnixMs } from './schemas';
+import type { Submission, SubmissionNonce } from './shared-state';
 
 // Domain-separator string. Bump the version suffix when the field set or
 // ordering changes so old signatures fail loudly under a new protocol.
@@ -42,8 +42,8 @@ function lengthPrefixed(parts: ReadonlyArray<string | number>): Uint8Array<Array
 
 export type SubmissionSignableFields = {
   fromPlayerId: PlayerId;
-  createdAt: number;
-  nonce: number;
+  createdAt: UnixMs;
+  nonce: SubmissionNonce;
   iv: SecretMessageIv;
   toHostCiphertext: EncryptedPayload;
   gameType: GameType;

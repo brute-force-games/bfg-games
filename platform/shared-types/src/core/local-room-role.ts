@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { zPlayerId, zRoomId } from './ids';
 import { zGameHostKeypair } from './identity';
-import { zGameType } from './schemas';
+import { zGameType, zRoomSeed, zUnixMs } from './schemas';
 
 // ─── LocalRoomRole — the per-room "what role am I in this room?" record ────
 //
@@ -32,7 +32,7 @@ export const zHostRoomBootstrap = z.object({
    * this into `room.seed` when bootstrapping so any game randomness can be
    * derived reproducibly.
    */
-  seed: z.string().min(1).optional()
+  seed: zRoomSeed.optional()
 });
 export type HostRoomBootstrap = z.infer<typeof zHostRoomBootstrap>;
 
@@ -42,8 +42,8 @@ export const zLocalRoomRoleHost = z.object({
   roomId: zRoomId,
   hostPlayerId: zPlayerId,
   hostKeypair: zGameHostKeypair,
-  bootstrap: zHostRoomBootstrap.nullable().default(null),
-  createdAt: z.number().int().min(0)
+  bootstrap: zHostRoomBootstrap.nullable(),
+  createdAt: zUnixMs
 });
 export type LocalRoomRoleHost = z.infer<typeof zLocalRoomRoleHost>;
 

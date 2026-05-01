@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 
 import {
   generateGameHostKeypair,
+  generateRoomSeed,
   loadGameHostKeypair,
   loadPlayerIdentity,
   zLocalRoomRoleHost,
@@ -12,9 +13,10 @@ import {
   type LocalRoomRole,
   type LocalRoomRoleHost,
   type PreferencesV1,
+  type RoomId,
+  type RoomSeed,
   type RoomStatus,
-  type PlayerId,
-  type RoomId
+  type PlayerId
 } from '@brute-force-games/shared-types';
 
 import type { RoomRoleTracker, RoomStore } from '@brute-force-games/multiplayer-types';
@@ -65,8 +67,8 @@ type SyncContextValue = {
     defaultGameType: GameType;
     defaultGameConfig?: unknown;
     maxPlayers?: number;
-    /** Optional deterministic room seed (written into `room.seed` on bootstrap). */
-    seed?: string;
+    /** Seed for deterministic RNG — use generateRoomSeed() for a random game. */
+    seed: RoomSeed;
   }) => Promise<{ roomId: RoomId; invite: string; role: LocalRoomRoleHost }>;
   /** Returns the persisted local role for `roomId`, or null. */
   getRoleForRoom: (roomId: RoomId) => LocalRoomRole | null;

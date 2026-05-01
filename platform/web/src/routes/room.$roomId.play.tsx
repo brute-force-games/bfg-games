@@ -1,11 +1,18 @@
-import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { useEffect, useMemo, useState } from 'react';
+import { z } from 'zod';
 
 import {
+  generateRoomSeed,
   zGameType,
   zRoomId,
+  GAME_FINALIZED_KIND,
   type LoadedGameHostKeypair
 } from '@brute-force-games/shared-types';
+
+export const Route = createFileRoute('/room/$roomId/play')({
+  validateSearch: z.object({ invite: z.string().optional() })
+});
 
 import type { Player, PlayerId, Room, RoomStore } from '@brute-force-games/multiplayer-types';
 
@@ -22,9 +29,9 @@ const FRAMEWORK_PLAYERS_ELIMINATED_KIND = 'framework/players_eliminated' as cons
 const FRAMEWORK_GAME_STARTED_KIND = 'framework/game_started' as const;
 
 export function RoomPlayRoute() {
-  const params = useParams({ from: '/room/$roomId/play' });
-  const parsedRoomId = zRoomId.safeParse(params.roomId);
-  const search = useSearch({ from: '/room/$roomId/play' }) as Record<string, string | undefined>;
+  const { roomId: roomIdParam } = Route.useParams();
+  const parsedRoomId = zRoomId.safeParse(roomIdParam);
+  const search = Route.useSearch();
   const {
     getRoomStore,
     identity,
@@ -116,7 +123,7 @@ export function RoomPlayRoute() {
   ]);
 
   if (!parsedRoomId.success) {
-    return <InvalidRoomLink rawId={params.roomId} />;
+    return <InvalidRoomLink rawId={roomIdParam} />;
   }
 
   if (!roomStore) {
@@ -253,6 +260,15 @@ function ConnectedRoom(props: {
                 ...(result.outcome.publicPayload !== undefined ? { payload: result.outcome.publicPayload } : {})
               }
             });
+            actions.push({
+              kind: 'event',
+              eventKind: GAME_FINALIZED_KIND,
+              publicPayload: {
+                kind: GAME_FINALIZED_KIND,
+                outcome: 'win',
+                winnerPlayerIds: result.outcome.winnerPlayerIds
+              }
+            });
             actions.push({ kind: 'updateRoom', patch: { status: 'finished' } });
           } else if (result.outcome.kind === 'draw') {
             actions.push({
@@ -263,6 +279,11 @@ function ConnectedRoom(props: {
                 winnerPlayerIds: [],
                 ...(result.outcome.publicPayload !== undefined ? { payload: result.outcome.publicPayload } : {})
               }
+            });
+            actions.push({
+              kind: 'event',
+              eventKind: GAME_FINALIZED_KIND,
+              publicPayload: { kind: GAME_FINALIZED_KIND, outcome: 'draw', winnerPlayerIds: [] }
             });
             actions.push({ kind: 'updateRoom', patch: { status: 'finished' } });
           }
@@ -329,6 +350,31 @@ function ConnectedRoom(props: {
           >
             Download archive
           </button>
+          {selfIsHost && room.status === 'finished' ? (
+            <button
+              type="button"
+              onClick={() => {
+                const engine = room.gameType ? getGameEngine(room.gameType) : null;
+                if (!engine) return;
+                void roomStore
+                  .exportGameRecord({
+                    appVersion: (import.meta as { env?: Record<string, string> }).env?.VITE_GIT_SHA ?? 'dev',
+                    engineVersion: engine.version
+                  })
+                  .then((record) => {
+                    const blob = new Blob([JSON.stringify(record, null, 2)], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `${room.id}-${room.gameType}-record.json`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  });
+              }}
+            >
+              Export signed record
+            </button>
+          ) : null}
         </div>
       ) : null}
 
@@ -546,6 +592,7 @@ function HostControls(props: {
       const gameType = zGameType.parse(room?.gameType ?? 'tictactoe');
       const { roomId: newRoomId, invite } = await createHostedRoom({
         defaultGameType: gameType,
+        seed: generateRoomSeed(),
         ...(room?.gameConfig !== undefined ? { defaultGameConfig: room.gameConfig } : {}),
         ...(room?.maxPlayers !== undefined ? { maxPlayers: room.maxPlayers } : {})
       });
