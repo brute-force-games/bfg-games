@@ -320,41 +320,13 @@ export class TinyBaseRoomStoreClient implements RoomStore {
     // UI render, because the play route's gate is `room?.status === 'active'`.
     this.connectedRoomId = opts.roomId;
 
-    try {
-      this.sync = await this.syncProvider.connect({ store: this.store, wsUrl: opts.wsUrl });
-      await this.sync.start();
-    } catch (err) {
-      // Roll back so a partially-failed connect doesn't masquerade as connected.
-      this.connectedRoomId = null;
-      throw err;
-    }
-
-    // Host-claim handling (trust-the-client model):
-    // The caller is the source of truth for "am I host?". If they pass a
-    // claim, we adopt the keypair and may bootstrap the room row when no row
-    // is present yet. We never auto-elect ourselves as host based on the
-    // (synced, racy) absence of a `room` row.
+    // Host-claim: adopt the keypair so host-only writes work.
+    // Room bootstrap and player registration are handled by bootstrapAsHostLocal()
+    // which the caller invokes at room-creation time, before navigation.
     if (opts.hostClaim) {
       this.hostKeypair = opts.hostClaim.hostKeypair;
-
       const existingRoom = this.getRoomOrNull(opts.roomId);
-      if (!existingRoom) {
-        if (opts.bootstrapRoomIfMissing) {
-          this.bootstrapRoomAsHost({
-            roomId: opts.roomId,
-            hostKeypair: this.hostKeypair,
-            bootstrap: opts.bootstrapRoomIfMissing
-          });
-        }
-        // If no bootstrap was provided we do nothing here: the row will
-        // arrive via sync (host-reload case). UI shows "Loading room…".
-      } else if (existingRoom.hostEncPubKey !== this.hostKeypair.pub) {
-        // Local claim disagrees with the synced room. Possible causes:
-        //   - Two devices both claimed host of this room (clients trust
-        //     themselves, so this is allowed but won't work cleanly).
-        //   - A previous version of this client wrote the row.
-        // We do NOT overwrite the row; the existing host remains canonical.
-        // Host-only writes will fail the requireHostForWrite check below.
+      if (existingRoom && existingRoom.hostEncPubKey !== this.hostKeypair.pub) {
         // eslint-disable-next-line no-console
         console.warn(
           `TinyBaseRoomStoreClient: local host claim for ${opts.roomId} does not match synced room.hostEncPubKey; this client will behave as a non-host`
@@ -362,20 +334,27 @@ export class TinyBaseRoomStoreClient implements RoomStore {
       }
     }
 
-    // Rejoin: preserve prior membership. If the synced player row already has
-    // us as ready, keep us ready so a reload/SPA-revisit doesn't drop us back
-    // to "not joined" — which would otherwise be unrecoverable when the room
-    // is mid-game (the lobby's Join toggle isn't rendered with status='active').
-    // The synced row may not have arrived yet at this point; the per-player
-    // listener installed below promotes selfReady the moment it does.
-    const priorRow = readRow(zPlayer, this.store, 'players', this.identity.playerId);
-    if (priorRow?.isReady === true) {
-      this.selfReady = true;
+    // Player setup: skip if bootstrapAsHostLocal already ran for this room
+    // (heartbeat already ticking). For non-host joins this always runs.
+    if (!this.heartbeat) {
+      const priorRow = readRow(zPlayer, this.store, 'players', this.identity.playerId);
+      if (priorRow?.isReady === true) {
+        this.selfReady = true;
+      }
+      this.installSelfReadyHoist();
+      this.upsertSelfPlayer();
+      this.heartbeat = window.setInterval(() => this.upsertSelfPlayer(), HEARTBEAT_INTERVAL_MS);
     }
-    this.installSelfReadyHoist();
 
-    this.upsertSelfPlayer();
-    this.heartbeat = window.setInterval(() => this.upsertSelfPlayer(), HEARTBEAT_INTERVAL_MS);
+    try {
+      this.sync = await this.syncProvider.connect({ store: this.store, wsUrl: opts.wsUrl });
+      await this.sync.start();
+    } catch (err) {
+      // Sync failed (no server, network error, etc.). connectedRoomId and all
+      // local state stay set so the room remains usable offline. The caller
+      // sees the error and can surface a non-blocking sync-status indicator.
+      throw err;
+    }
   }
 
   // Listens for our own player row appearing/changing in the synced store.
@@ -455,6 +434,40 @@ export class TinyBaseRoomStoreClient implements RoomStore {
     this.connectedRoomId = null;
     this.hostKeypair = null;
     this.store.delTables();
+  }
+
+  // ─── Local-only bootstrap (no WS) ───────────────────────────────────────
+  // Called by the host immediately after creating a room, before navigation.
+  // Sets up the room row and the host's own player row without requiring sync.
+  // The subsequent connect() call only needs to handle the WS layer.
+  bootstrapAsHostLocal(opts: {
+    roomId: RoomId;
+    inviteCode: string;
+    hostKeypair: LoadedGameHostKeypair;
+    bootstrap: HostRoomBootstrap;
+  }): void {
+    this.connectedRoomId = opts.roomId;
+    this.hostKeypair = opts.hostKeypair;
+    const room = this.getRoomOrNull(opts.roomId);
+    if (!room) {
+      writeRow(this.store, 'room', {
+        id: opts.roomId,
+        inviteCode: opts.inviteCode,
+        hostPlayerId: this.identity.playerId,
+        hostEncPubKey: opts.hostKeypair.pub,
+        status: 'waiting',
+        maxPlayers: opts.bootstrap.maxPlayers ?? 8,
+        seed: opts.bootstrap.seed ?? String(Date.now()),
+        gameType: opts.bootstrap.gameType,
+        gameConfig: opts.bootstrap.gameConfig ?? {},
+        dropBehavior: 'pause',
+        disconnectGraceMs: 15_000,
+        turnTimeoutMs: 0
+      });
+    }
+    this.installSelfReadyHoist();
+    this.upsertSelfPlayer();
+    this.heartbeat = window.setInterval(() => this.upsertSelfPlayer(), HEARTBEAT_INTERVAL_MS);
   }
 
   // ─── Dev-only escape hatch ───────────────────────────────────────────────

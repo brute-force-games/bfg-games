@@ -110,9 +110,7 @@ export function SyncProvider(props: { children: React.ReactNode }) {
   // stable callbacks that consumers can put in useEffect/useMemo deps without
   // tearing down per render of SyncProvider.
   const bootstrapRef = useRef(bootstrap);
-  useEffect(() => {
-    bootstrapRef.current = bootstrap;
-  }, [bootstrap]);
+  bootstrapRef.current = bootstrap; // sync update so callbacks see the current value on first render
   const roomStoresRef = useRef(new Map<RoomId, TinyBaseRoomStoreClient>());
   const roomStoreUnsubsRef = useRef(new Map<RoomId, Array<() => void>>());
   const nonceProviderRef = useRef<(() => number) | null>(null);
@@ -311,6 +309,7 @@ export function SyncProvider(props: { children: React.ReactNode }) {
         maxPlayers: input.maxPlayers,
         ...(input.seed ? { seed: input.seed } : {})
       };
+      const loadedHostKeypair = await loadGameHostKeypair(hostKeypair);
       const role = zLocalRoomRoleHost.parse({
         kind: 'host',
         version: 1,
@@ -322,8 +321,30 @@ export function SyncProvider(props: { children: React.ReactNode }) {
       });
       roleTracker.set(role);
 
-      // Reflect the host role in the rooms index immediately so the home page
-      // doesn't briefly show 'unknown'/'player' before the room row syncs.
+      // Bootstrap the room store immediately — the host is implicitly connected
+      // the moment they create the room. This writes the room row and the host's
+      // player row locally so the room UI is ready before the WS connect attempt.
+      // We reach into roomStoresRef to get the concrete TinyBaseRoomStoreClient
+      // (getRoomStore returns the abstract RoomStore which lacks this method).
+      const roomStore = (() => {
+        const existing = roomStoresRef.current.get(roomId);
+        if (existing) return existing;
+        const s = new TinyBaseRoomStoreClient({
+          identity: b.identity,
+          ...(nonceProviderRef.current ? { getNextSubmissionNonce: nonceProviderRef.current } : {}),
+          displayName: b.preferences.displayName,
+          avatarColor: b.preferences.avatarColor
+        });
+        roomStoresRef.current.set(roomId, s);
+        return s;
+      })();
+      roomStore.bootstrapAsHostLocal({
+        roomId,
+        inviteCode: invite,
+        hostKeypair: loadedHostKeypair,
+        bootstrap: bootstrapHints
+      });
+
       touchRoomIndex(roomId, {
         connected: false,
         roomStatus: 'waiting',

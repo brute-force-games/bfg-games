@@ -18,13 +18,12 @@ export function makeRoomId(): string {
 }
 
 export function generateInviteCode(): string {
-  // Simple 6-char base32-ish alphabet, excludes ambiguous chars.
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   const bytes = new Uint8Array(6);
   crypto.getRandomValues(bytes);
-  let out = '';
-  for (const b of bytes) out += alphabet[b % alphabet.length];
-  return out;
+  let code = '';
+  for (const b of bytes) code += alphabet[b % alphabet.length];
+  return `ivc_${code}`;
 }
 
 export function parseInviteInput(inputRaw: string): ParsedInvite | null {

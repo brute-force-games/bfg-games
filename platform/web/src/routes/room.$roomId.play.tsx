@@ -11,7 +11,8 @@ import {
 } from '@brute-force-games/shared-types';
 
 export const Route = createFileRoute('/room/$roomId/play')({
-  validateSearch: z.object({ invite: z.string().optional() })
+  validateSearch: z.object({ invite: z.string().optional() }),
+  component: RoomPlayRoute
 });
 
 import type { Player, PlayerId, Room, RoomStore } from '@brute-force-games/multiplayer-types';
@@ -189,11 +190,14 @@ function ConnectedRoom(props: {
   const hostPlayerId = room?.hostPlayerId ?? null;
   const readyPlayers = players.filter((p) => p.isReady);
   const readyCount = readyPlayers.length;
+  const roomStatus = room?.status ?? 'waiting';
+  const roomGameType = room?.gameType ?? null;
+  const engine = roomGameType ? getGameEngine(roomGameType) : null;
+  const isLive = room !== null && (room.status === 'active' || room.status === 'finished');
 
   // Lobby state machine: host pushes waiting → starting once enough players
   // are ready. Active/finished are entered via the Start button (`startGame`).
   useEffect(() => {
-    if (connected !== 'connected') return;
     if (!selfIsHost) return;
     if (!room) return;
     if (room.status === 'active' || room.status === 'finished') return;
@@ -201,7 +205,7 @@ function ConnectedRoom(props: {
     if (room.status !== nextStatus) {
       void roomStore.updateRoomAsHost({ status: nextStatus });
     }
-  }, [connected, readyCount, room, roomStore, selfIsHost]);
+  }, [readyCount, room, roomStore, selfIsHost]);
 
   // ─── Host loops: delegate to the registered game engine ──────────────────
   //
@@ -209,9 +213,7 @@ function ConnectedRoom(props: {
   // type is known. We deliberately exclude `room` itself from the deps:
   // arbitrary room-row updates (player join/ready, config tweaks) shouldn't
   // tear down the validator and re-prime the processed set.
-  const roomGameType = room?.gameType ?? null;
   useEffect(() => {
-    if (connected !== 'connected') return;
     if (!selfIsHost) return;
     if (!roomGameType) return;
     const engine = getGameEngine(roomGameType);
@@ -307,20 +309,8 @@ function ConnectedRoom(props: {
       gameHandle?.stop();
       chatHandle?.stop();
     };
-  }, [connected, selfIsHost, roomGameType, roomStore]);
+  }, [selfIsHost, roomGameType, roomStore]);
 
-  if (connected === 'error') {
-    return (
-      <div style={{ maxWidth: 720, margin: '0 auto' }}>
-        <div style={{ padding: 16, border: '1px solid #f2c2c2', borderRadius: 12 }}>
-          <strong style={{ color: '#7a1f1f' }}>Connection error</strong>
-          <p style={{ marginTop: 8, color: '#555' }}>
-            We couldn't reach the multiplayer server. Try refreshing.
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div style={{ maxWidth: 720, margin: '0 auto' }}>
@@ -331,13 +321,11 @@ function ConnectedRoom(props: {
           <Link to="/settings">Settings</Link>
         </div>
       </div>
-      {room ? (
+      {room && engine ? (
         <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button
             type="button"
             onClick={() => {
-              const engine = room.gameType ? getGameEngine(room.gameType) : null;
-              if (!engine) return;
               const archive = exportGameArchive(roomStore, engine);
               const blob = new Blob([JSON.stringify(archive, null, 2)], { type: 'application/json' });
               const url = URL.createObjectURL(blob);
@@ -354,8 +342,6 @@ function ConnectedRoom(props: {
             <button
               type="button"
               onClick={() => {
-                const engine = room.gameType ? getGameEngine(room.gameType) : null;
-                if (!engine) return;
                 void roomStore
                   .exportGameRecord({
                     appVersion: (import.meta as { env?: Record<string, string> }).env?.VITE_GIT_SHA ?? 'dev',
@@ -401,7 +387,7 @@ function ConnectedRoom(props: {
           />
         ) : null}
 
-        {connected === 'connected' && (room?.status ?? 'waiting') !== 'active' ? (
+        {roomStatus !== 'active' ? (
           <LobbyConfigSection room={room} roomStore={roomStore} selfIsHost={selfIsHost} />
         ) : null}
 
@@ -409,19 +395,17 @@ function ConnectedRoom(props: {
           players={players}
           hostPlayerId={hostPlayerId}
           selfPlayerId={roomStore.selfPlayerId}
-          roomStatus={room?.status ?? 'waiting'}
+          roomStatus={roomStatus}
           readyCount={readyCount}
           onToggleReady={(ready) => roomStore.setSelfReady(ready)}
         />
 
-        {room && (room.status === 'active' || room.status === 'finished') ? (
+        {isLive && room ? (
           <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid #eee' }}>
-            {getGameEngine(room.gameType) ? (
-              <GameStatusBar store={roomStore} engine={getGameEngine(room.gameType)!} players={players} />
+            {engine ? (
+              <GameStatusBar store={roomStore} engine={engine} players={players} />
             ) : (
-              <h2 style={{ margin: '0 0 8px 0', fontSize: 16 }}>
-                {getGameEngine(room.gameType)?.displayName ?? room.gameType}
-              </h2>
+              <h2 style={{ margin: '0 0 8px 0', fontSize: 16 }}>{room.gameType}</h2>
             )}
             {renderPlayerUI({
               gameType: room.gameType,
@@ -430,16 +414,16 @@ function ConnectedRoom(props: {
               selfPlayerId: roomStore.selfPlayerId,
               players
             }) ?? <div style={{ color: '#777' }}>No engine for game type "{room.gameType}".</div>}
-            {getGameEngine(room.gameType) ? (
+            {engine ? (
               <>
-                <GameOverPanel store={roomStore} engine={getGameEngine(room.gameType)!} players={players} />
-                <ActivityFeed store={roomStore} engine={getGameEngine(room.gameType)!} players={players} />
+                <GameOverPanel store={roomStore} engine={engine} players={players} />
+                <ActivityFeed store={roomStore} engine={engine} players={players} />
               </>
             ) : null}
           </div>
         ) : null}
 
-        {room?.status === 'active' ? (
+        {room && roomStatus === 'active' ? (
           <AutoPlayPanel
             store={roomStore}
             room={room}

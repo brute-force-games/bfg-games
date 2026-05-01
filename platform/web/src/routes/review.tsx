@@ -3,7 +3,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { z } from 'zod';
 
 export const Route = createFileRoute('/review')({
-  validateSearch: z.object({ bundle: z.string().optional() })
+  validateSearch: z.object({ bundle: z.string().optional() }),
+  component: ReviewRoute
 });
 
 import {
