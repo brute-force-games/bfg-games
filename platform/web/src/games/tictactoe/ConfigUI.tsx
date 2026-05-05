@@ -6,7 +6,7 @@ export function TicTacToeConfigUI(props: {
   isHost: boolean;
 }) {
   const { config, onChange, isHost } = props;
-  const cfg = zTicTacToeConfig.safeParse(config).data ?? { symbolPair: 'xo', ui: 'godot' };
+  const cfg = zTicTacToeConfig.safeParse(config).data ?? { symbolPair: 'red_blue', ui: 'godot' };
   const symbols =
     cfg.symbolPair === 'lion_lamb'
       ? ({ X: 'Lion', O: 'Lamb' } as const)

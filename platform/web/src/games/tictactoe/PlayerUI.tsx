@@ -40,7 +40,7 @@ const SUBTITLES: Record<TicTacToeSymbolPair, string> = {
 
 export function TicTacToePlayerUI(props: PlayerUIProps<TicTacToeConfig>) {
   const { store, room, selfPlayerId, players } = props;
-  const config = zTicTacToeConfig.safeParse(props.config).data ?? { symbolPair: 'xo', ui: 'godot' };
+  const config = zTicTacToeConfig.safeParse(props.config).data ?? { symbolPair: 'red_blue', ui: 'godot' };
   const symbolByMark = useMemo(() => symbolMapFor(config), [config]);
   const playerById = useMemo(() => new Map(players.map((p) => [p.id, p])), [players]);
 
@@ -146,7 +146,7 @@ function ReactBoard(props: {
       bannerWeight = 700;
       if (symbolPair === 'xo') {
         bannerText = `${symbolByMark[winMark]} wins! 🎉`;
-        bannerBg = '#fef3ef'; bannerColor = '#e05c40';
+        bannerBg = '#fef3ef'; bannerColor = '#c0392b';
       } else if (symbolPair === 'red_blue') {
         bannerText = `${symbolByMark[winMark]} wins!`;
         bannerBg = winMark === 'X' ? '#fce8e7' : '#e7edf8';
@@ -232,7 +232,7 @@ function ReactBoard(props: {
               <line
                 x1={a.x - (dx / len) * ext} y1={a.y - (dy / len) * ext}
                 x2={b.x + (dx / len) * ext} y2={b.y + (dy / len) * ext}
-                stroke="#e05c40" strokeWidth={5} strokeLinecap="round"
+                stroke="#c0392b" strokeWidth={5} strokeLinecap="round"
               />
             </svg>
           );
@@ -265,12 +265,12 @@ function CellMark({ value, symbolPair }: { value: CellValue; symbolPair: TicTacT
   if (symbolPair === 'xo') {
     return value === 'X' ? (
       <svg width={CELL} height={CELL} viewBox={`0 0 ${CELL} ${CELL}`} style={{ display: 'block' }}>
-        <line x1={18} y1={18} x2={62} y2={62} stroke="#1a1a1a" strokeWidth={6} strokeLinecap="round" />
-        <line x1={62} y1={18} x2={18} y2={62} stroke="#1a1a1a" strokeWidth={6} strokeLinecap="round" />
+        <line x1={18} y1={18} x2={62} y2={62} stroke="#c0392b" strokeWidth={7} strokeLinecap="round" />
+        <line x1={62} y1={18} x2={18} y2={62} stroke="#c0392b" strokeWidth={7} strokeLinecap="round" />
       </svg>
     ) : (
       <svg width={CELL} height={CELL} viewBox={`0 0 ${CELL} ${CELL}`} style={{ display: 'block' }}>
-        <circle cx={40} cy={40} r={22} fill="none" stroke="#1a1a1a" strokeWidth={6} />
+        <circle cx={40} cy={40} r={22} fill="none" stroke="#2471a3" strokeWidth={7} />
       </svg>
     );
   }
