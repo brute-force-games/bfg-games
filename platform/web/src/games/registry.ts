@@ -43,7 +43,8 @@ export function renderPlayerUI(args: RenderPlayerUIArgs): ReactElement | null {
     room: args.room,
     selfPlayerId: args.selfPlayerId,
     players: args.players,
-    config
+    config,
+    ...(args.userGameRole !== undefined ? { userGameRole: args.userGameRole } : {})
   };
   return createElement(PlayerUI, props);
 }

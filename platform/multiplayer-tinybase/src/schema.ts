@@ -1,104 +1,130 @@
 import { z } from 'zod';
 import type { Cell, Store, TablesSchema } from 'tinybase';
+import { createZodSchematizer } from 'tinybase/schematizers/schematizer-zod';
+import {
+  zAutoplayMode,
+  zDropBehavior,
+  zPlayerRole,
+  zRoomStatus
+} from '@brute-force-games/shared-types';
 
-// TinyBase v8+ stores objects and arrays as native cell values, serializing
-// them internally. No manual JSON encode/decode is needed for complex fields.
+/** JSON-serializable object cell — TinyBase stores plain objects; Zod schematizer maps `z.record` to `object`. */
+const zJsonObjectCell = () => z.record(z.string(), z.unknown()).default({});
 
-export const ROOM_TABLES_SCHEMA = {
-  room: {
-    inviteCode: { type: 'string', default: '' },
-    hostPlayerId: { type: 'string', default: '' },
-    hostEncPubKey: { type: 'string', default: '' },
-    status: { type: 'string', default: 'waiting' },
-    maxPlayers: { type: 'number', default: 8 },
-    seed: { type: 'string', default: '' },
-    gameType: { type: 'string', default: '' },
-    gameConfig: { type: 'object', default: {} },
-    dropBehavior: { type: 'string', default: 'pause' },
-    disconnectGraceMs: { type: 'number', default: 15_000 },
-    turnTimeoutMs: { type: 'number', default: 0 }
-  },
-  players: {
-    displayName: { type: 'string', default: '' },
-    avatarColor: { type: 'string', default: '' },
-    role: { type: 'string', default: 'player' },
-    score: { type: 'number', default: 0 },
-    isConnected: { type: 'boolean', default: false },
-    isReady: { type: 'boolean', default: false },
-    joinedAt: { type: 'number', default: 0 },
-    lastSeen: { type: 'number', default: 0 },
-    signingPubKey: { type: 'string', default: '' },
-    encPubKey: { type: 'string', default: '' },
-    autoplayMode: { type: 'string', default: 'off' },
-    autoplaySince: { type: 'number', default: null, allowNull: true }
-  },
-  secretPool: {
-    ciphertext: { type: 'string', default: '' },
-    iv: { type: 'string', default: '' },
-    assignedTo: { type: 'string', default: '' }
-  },
+const zGameStatePrivateKind = z.enum(['plain', 'encrypted']);
 
-  // ── Shared-state v1 (see platform/shared-types/src/core/shared-state.ts) ──
-  submissions: {
-    fromPlayerId: { type: 'string', default: '' },
-    toHostCiphertext: { type: 'string', default: '' },
-    iv: { type: 'string', default: '' },
-    signature: { type: 'string', default: '' },
-    nonce: { type: 'number', default: 0 },
-    createdAt: { type: 'number', default: 0 },
-    gameType: { type: 'string', default: '' },
-    kind: { type: 'string', default: '' }
-  },
-  events: {
-    seq: { type: 'number', default: 0 },
-    createdAt: { type: 'number', default: 0 },
-    kind: { type: 'string', default: '' },
-    publicPayload: { type: 'object', default: {} },
-    fromPlayerId: { type: 'string', default: null, allowNull: true },
-    hostSignature: { type: 'string', default: '' }
-  },
-  eventsPrivate: {
-    evtId: { type: 'string', default: '' },
-    playerId: { type: 'string', default: '' },
-    ciphertextToPlayer: { type: 'string', default: '' },
-    iv: { type: 'string', default: '' }
-  },
-  gameStatePublic: {
-    seq: { type: 'number', default: 0 },
-    state: { type: 'object', default: {} },
-    hostSignature: { type: 'string', default: '' }
-  },
-  gameStateHistory: {
-    seq: { type: 'number', default: 0 },
-    state: { type: 'object', default: {} },
-    hostSignature: { type: 'string', default: '' }
-  },
-  gameStatePrivate: {
-    // Discriminator: 'plain' | 'encrypted'. Only the columns matching `kind`
-    // are read; the others sit at default and are stripped by Zod.
-    kind: { type: 'string', default: 'plain' },
-    seq: { type: 'number', default: 0 },
-    state: { type: 'object', default: {} }, // (kind=plain)
-    ciphertext: { type: 'string', default: '' }, // (kind=encrypted)
-    iv: { type: 'string', default: '' } // (kind=encrypted)
-  },
-  // ── Lobby chat (host-authenticated, see platform/shared-types/src/core/lobby-chat.ts) ──
-  chatSubmissions: {
-    fromPlayerId: { type: 'string', default: '' },
-    toHostCiphertext: { type: 'string', default: '' },
-    iv: { type: 'string', default: '' },
-    signature: { type: 'string', default: '' },
-    nonce: { type: 'number', default: 0 },
-    createdAt: { type: 'number', default: 0 }
-  },
-  chatEvents: {
-    seq: { type: 'number', default: 0 },
-    createdAt: { type: 'number', default: 0 },
-    fromPlayerId: { type: 'string', default: '' },
-    text: { type: 'string', default: '' },
-    hostSignature: { type: 'string', default: '' }
-  }
-} as const satisfies TablesSchema;
+const zRoomRow = z.object({
+  inviteCode: z.string().default(''),
+  hostPlayerId: z.string().default(''),
+  hostEncPubKey: z.string().default(''),
+  status: zRoomStatus.default('waiting'),
+  maxPlayers: z.number().default(8),
+  seed: z.string().default(''),
+  gameType: z.string().default(''),
+  gameConfig: zJsonObjectCell(),
+  dropBehavior: zDropBehavior.default('pause'),
+  disconnectGraceMs: z.number().default(15_000),
+  turnTimeoutMs: z.number().default(0)
+});
+
+const zPlayersRow = z.object({
+  displayName: z.string().default(''),
+  avatarColor: z.string().default(''),
+  role: zPlayerRole.default('player'),
+  score: z.number().default(0),
+  isConnected: z.boolean().default(false),
+  isReady: z.boolean().default(false),
+  joinedAt: z.number().default(0),
+  lastSeen: z.number().default(0),
+  signingPubKey: z.string().default(''),
+  encPubKey: z.string().default(''),
+  autoplayMode: zAutoplayMode.default('off'),
+  autoplaySince: z.number().nullable().default(null)
+});
+
+const zSecretPoolRow = z.object({
+  ciphertext: z.string().default(''),
+  iv: z.string().default(''),
+  assignedTo: z.string().default('')
+});
+
+const zSubmissionsRow = z.object({
+  fromPlayerId: z.string().default(''),
+  toHostCiphertext: z.string().default(''),
+  iv: z.string().default(''),
+  signature: z.string().default(''),
+  nonce: z.number().default(0),
+  createdAt: z.number().default(0),
+  gameType: z.string().default(''),
+  kind: z.string().default('')
+});
+
+const zEventsRow = z.object({
+  seq: z.number().default(0),
+  createdAt: z.number().default(0),
+  kind: z.string().default(''),
+  publicPayload: zJsonObjectCell(),
+  fromPlayerId: z.string().nullable().default(null),
+  hostSignature: z.string().default('')
+});
+
+const zEventsPrivateRow = z.object({
+  evtId: z.string().default(''),
+  playerId: z.string().default(''),
+  ciphertextToPlayer: z.string().default(''),
+  iv: z.string().default('')
+});
+
+const zGameStatePublicRow = z.object({
+  seq: z.number().default(0),
+  state: zJsonObjectCell(),
+  hostSignature: z.string().default('')
+});
+
+const zGameStateHistoryRow = z.object({
+  seq: z.number().default(0),
+  state: zJsonObjectCell(),
+  hostSignature: z.string().default('')
+});
+
+const zGameStatePrivateRow = z.object({
+  kind: zGameStatePrivateKind.default('plain'),
+  seq: z.number().default(0),
+  state: zJsonObjectCell(),
+  ciphertext: z.string().default(''),
+  iv: z.string().default('')
+});
+
+const zChatSubmissionsRow = z.object({
+  fromPlayerId: z.string().default(''),
+  toHostCiphertext: z.string().default(''),
+  iv: z.string().default(''),
+  signature: z.string().default(''),
+  nonce: z.number().default(0),
+  createdAt: z.number().default(0)
+});
+
+const zChatEventsRow = z.object({
+  seq: z.number().default(0),
+  createdAt: z.number().default(0),
+  fromPlayerId: z.string().default(''),
+  text: z.string().default(''),
+  hostSignature: z.string().default('')
+});
+
+export const ROOM_TABLES_SCHEMA: TablesSchema = createZodSchematizer().toTablesSchema({
+  room: zRoomRow,
+  players: zPlayersRow,
+  secretPool: zSecretPoolRow,
+  submissions: zSubmissionsRow,
+  events: zEventsRow,
+  eventsPrivate: zEventsPrivateRow,
+  gameStatePublic: zGameStatePublicRow,
+  gameStateHistory: zGameStateHistoryRow,
+  gameStatePrivate: zGameStatePrivateRow,
+  chatSubmissions: zChatSubmissionsRow,
+  chatEvents: zChatEventsRow
+});
 
 export function readRow<T>(zodSchema: z.ZodSchema<T>, store: Store, tableId: string, rowId: string): T | null {
   const raw = store.getRow(tableId, rowId);

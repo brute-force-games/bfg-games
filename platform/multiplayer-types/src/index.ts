@@ -11,8 +11,21 @@ export type {
   GameType,
   Player,
   Room,
+  RoomSessionRole,
   RoomStatus,
-  SecretPoolItem
+  SecretPoolItem,
+  UserGameRole,
+  RoomRouteSegment,
+  DeriveUserGameRoleInput
+} from '@brute-force-games/shared-types';
+
+export {
+  deriveUserGameRole,
+  isHostAuthority,
+  isHostModeratorOnly,
+  isHostWithSeat,
+  canSubmitGameMoves,
+  shouldUseSpectatorChrome
 } from '@brute-force-games/shared-types';
 
 export type {
@@ -28,6 +41,7 @@ export type {
   EventId,
   GameStatePublic,
   GameStatePrivate,
+  EventsPrivate,
   LobbyChatSubmission,
   LobbyChatEvent,
   ChatSubmissionId,
@@ -43,6 +57,7 @@ import type {
   Event as RoomEvent,
   GameExportV1,
   GameStatePublic,
+  EventsPrivate,
   GameStatePrivate,
   GameType,
   HostRoomBootstrap,
@@ -54,6 +69,7 @@ import type {
   PlayerId,
   Room,
   RoomId,
+  RoomSessionRole,
   SecretMessageIv,
   Submission,
   SubmissionId,
@@ -90,6 +106,19 @@ export type RoomConnectOptions = ConnectOptions & {
    * otherwise.
    */
   bootstrapRoomIfMissing?: HostRoomBootstrap;
+  /**
+   * Force the role decision to 'observer' regardless of room status. Used
+   * when the user opened `/spectate` as a guest. Mutually exclusive with
+   * `hostClaim`. Without this flag, role is decided automatically:
+   * fresh joiners to active/finished rooms become observers; everyone else is
+   * a player.
+   */
+  joinAsObserver?: boolean;
+  /**
+   * When false with `hostClaim`, the host does not take a player seat
+   * (`RoomSessionRole` becomes `moderator`): no `players` row, no game submissions.
+   */
+  hostParticipatesAsPlayer?: boolean;
 };
 
 // ─── Player submission input ────────────────────────────────────────────────
@@ -176,11 +205,22 @@ export type HostLoopHandle = {
 // The transport-agnostic surface that frontend code consumes. Methods are
 // grouped by role: identity, connection, reads, subscriptions, player
 // intents, host-only writes, and host loops.
+/** @deprecated Use `RoomSessionRole` from `@brute-force-games/shared-types`. */
+export type SelfRoomRole = import('@brute-force-games/shared-types').RoomSessionRole;
+
 export interface RoomStore {
   // Identity
   readonly selfPlayerId: PlayerId;
   setSelfProfile(input: { displayName?: string; avatarColor?: string }): void;
   setSelfReady(ready: boolean): void;
+  /**
+   * Self's role in this room. Observers are anonymous: they hold no row in
+   * `players`, never heartbeat, and host-side validators reject their
+   * submissions/chat as `unknown_player`. A new joiner becomes an observer
+   * when they connect to a room whose status is already 'active' or 'finished'.
+   */
+  getSelfRoomRole(): RoomSessionRole;
+  onSelfRoomRoleChanged(cb: (role: RoomSessionRole) => void): () => void;
 
   // Connection
   connect(opts: RoomConnectOptions): Promise<void>;
@@ -198,6 +238,7 @@ export interface RoomStore {
   getGameStatePublicOrNull(): GameStatePublic | null;
   getGameStatePrivateOrNull(playerId: PlayerId): GameStatePrivate | null;
   getGameStateHistory(): { seq: number; state: unknown }[];
+  getEventsPrivate(): EventsPrivate[];
 
   // Subscriptions (each returns an unsubscribe function; callbacks fire once
   // synchronously with the current value before subscribing).
@@ -212,6 +253,7 @@ export interface RoomStore {
     cb: (state: GameStatePrivate | null) => void
   ): () => void;
   onGameStateHistoryChanged(cb: (rows: { seq: number; state: unknown }[]) => void): () => void;
+  onEventsPrivateChanged(cb: (rows: EventsPrivate[]) => void): () => void;
 
   // Player-side intents
   submit(input: SubmitInput): Promise<SubmissionId>;

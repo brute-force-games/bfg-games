@@ -71,6 +71,7 @@ import type {
   HostLoopHandlers,
   HostRoomBootstrap,
   RoomConnectOptions,
+  RoomSessionRole,
   RoomStore,
   SubmitInput
 } from '@brute-force-games/multiplayer-types';
@@ -169,6 +170,15 @@ export class TinyBaseRoomStoreClient implements RoomStore {
   private gameHostLoop: { stop: () => void } | null = null;
   private chatHostLoop: { stop: () => void } | null = null;
 
+  // Self role: 'pending' until we know room.status (need it to decide whether
+  // a fresh joiner gets to be a player or is bumped to anonymous-observer).
+  // Observers do not write a row to `players` and do not heartbeat.
+  // `moderator` = host claim without a player seat (no row / no game submits).
+  private selfRole: RoomSessionRole = 'pending';
+  private selfRoleListeners = new Set<(role: RoomSessionRole) => void>();
+  private hostParticipatesAsPlayer = true;
+  private pendingRoleListenerId: string | null = null;
+
   constructor(opts: TinyBaseRoomStoreOptions) {
     this.store = createMergeableStore();
     this.store.setTablesSchema(ROOM_TABLES_SCHEMA);
@@ -188,13 +198,77 @@ export class TinyBaseRoomStoreClient implements RoomStore {
     if (input.displayName != null) this.displayName = input.displayName;
     if (input.avatarColor != null) this.avatarColor = input.avatarColor;
     // If connected, publish immediately; if not, it will be published on connect.
-    if (this.connectedRoomId) this.upsertSelfPlayer();
+    if (this.connectedRoomId && this.selfRole === 'player') this.upsertSelfPlayer();
   }
 
   setSelfReady(ready: boolean): void {
+    if (this.selfRole === 'observer' || this.selfRole === 'moderator') return;
     this.selfReady = ready;
     // Persist immediately (and keep it on subsequent heartbeats).
     this.upsertSelfPlayer();
+  }
+
+  getSelfRoomRole(): RoomSessionRole {
+    return this.selfRole;
+  }
+
+  onSelfRoomRoleChanged(cb: (role: RoomSessionRole) => void): () => void {
+    this.selfRoleListeners.add(cb);
+    cb(this.selfRole);
+    return () => {
+      this.selfRoleListeners.delete(cb);
+    };
+  }
+
+  private setSelfRole(next: RoomSessionRole): void {
+    if (this.selfRole === next) return;
+    this.selfRole = next;
+    for (const cb of this.selfRoleListeners) cb(next);
+  }
+
+  // Decides player vs observer based on the room row, then starts the
+  // player-only side-effects (heartbeat + ready-hoist) iff joining as player.
+  // Idempotent: safe to call multiple times.
+  private commitRoleFromRoom(room: Room): void {
+    if (this.selfRole !== 'pending') return;
+    if (this.hostKeypair && !this.hostParticipatesAsPlayer) {
+      this.setSelfRole('moderator');
+      return;
+    }
+    const isInProgress = room.status === 'active' || room.status === 'finished';
+    if (isInProgress) {
+      this.setSelfRole('observer');
+      return;
+    }
+    this.setSelfRole('player');
+    if (!this.heartbeat) {
+      this.installSelfReadyHoist();
+      this.upsertSelfPlayer();
+      this.heartbeat = window.setInterval(() => this.upsertSelfPlayer(), HEARTBEAT_INTERVAL_MS);
+    }
+  }
+
+  // Watches for the room row to arrive via WS sync so a fresh non-host joiner
+  // can decide their role. Self-disposes once the role is committed.
+  private installPendingRoleListener(): void {
+    if (this.pendingRoleListenerId !== null) return;
+    this.pendingRoleListenerId = this.store.addTableListener('room', () => {
+      if (this.selfRole !== 'pending') {
+        if (this.pendingRoleListenerId !== null) {
+          this.store.delListener(this.pendingRoleListenerId);
+          this.pendingRoleListenerId = null;
+        }
+        return;
+      }
+      if (!this.connectedRoomId) return;
+      const room = this.getRoomOrNull(this.connectedRoomId);
+      if (!room) return;
+      this.commitRoleFromRoom(room);
+      if (this.pendingRoleListenerId !== null) {
+        this.store.delListener(this.pendingRoleListenerId);
+        this.pendingRoleListenerId = null;
+      }
+    });
   }
 
   // ─── Reads ──────────────────────────────────────────────────────────────
@@ -229,6 +303,10 @@ export class TinyBaseRoomStoreClient implements RoomStore {
 
   getGameStateHistory(): GameStateHistoryRow[] {
     return readAllRows(zGameStateHistoryRow, this.store, 'gameStateHistory').sort((a, b) => a.seq - b.seq);
+  }
+
+  getEventsPrivate(): EventsPrivate[] {
+    return readAllRows(zEventsPrivate, this.store, 'eventsPrivate');
   }
 
   getGameStatePrivateOrNull(playerId: PlayerId): GameStatePrivate | null {
@@ -293,6 +371,13 @@ export class TinyBaseRoomStoreClient implements RoomStore {
     return () => this.store.delListener(listenerId);
   }
 
+  onEventsPrivateChanged(cb: (rows: EventsPrivate[]) => void): () => void {
+    const fire = () => cb(this.getEventsPrivate());
+    fire();
+    const listenerId = this.store.addTableListener('eventsPrivate', () => fire());
+    return () => this.store.delListener(listenerId);
+  }
+
   onGameStatePrivateChanged(playerId: PlayerId, cb: (state: GameStatePrivate | null) => void): () => void {
     const fire = () => cb(this.getGameStatePrivateOrNull(playerId));
     fire();
@@ -334,16 +419,37 @@ export class TinyBaseRoomStoreClient implements RoomStore {
       }
     }
 
-    // Player setup: skip if bootstrapAsHostLocal already ran for this room
-    // (heartbeat already ticking). For non-host joins this always runs.
-    if (!this.heartbeat) {
+    this.hostParticipatesAsPlayer = opts.hostParticipatesAsPlayer !== false;
+
+    // Role/player setup. The host bootstraps locally before connect, so by
+    // the time we get here either the heartbeat is already ticking (host) or
+    // we need to decide player-vs-observer for a fresh joiner. Observers are
+    // anonymous: no row in `players`, no heartbeat, no chat — so we defer the
+    // first upsert until we've seen the room row to know its status.
+    if (!this.heartbeat && this.selfRole === 'pending') {
       const priorRow = readRow(zPlayer, this.store, 'players', this.identity.playerId);
-      if (priorRow?.isReady === true) {
-        this.selfReady = true;
+      if (priorRow?.isReady === true) this.selfReady = true;
+
+      if (opts.joinAsObserver && !this.hostKeypair) {
+        // Caller opened `/spectate`: anonymous, regardless of status.
+        this.setSelfRole('observer');
+      } else if (this.hostKeypair && !this.hostParticipatesAsPlayer) {
+        this.setSelfRole('moderator');
+      } else if (priorRow || this.hostKeypair) {
+        // Rejoining (we already had a row) or hosting as a seated player.
+        this.setSelfRole('player');
+        this.installSelfReadyHoist();
+        this.upsertSelfPlayer();
+        this.heartbeat = window.setInterval(() => this.upsertSelfPlayer(), HEARTBEAT_INTERVAL_MS);
+      } else {
+        const localRoom = this.getRoomOrNull(opts.roomId);
+        if (localRoom) {
+          this.commitRoleFromRoom(localRoom);
+        } else {
+          // Wait for sync to deliver the room row, then decide.
+          this.installPendingRoleListener();
+        }
       }
-      this.installSelfReadyHoist();
-      this.upsertSelfPlayer();
-      this.heartbeat = window.setInterval(() => this.upsertSelfPlayer(), HEARTBEAT_INTERVAL_MS);
     }
 
     try {
@@ -398,6 +504,10 @@ export class TinyBaseRoomStoreClient implements RoomStore {
       this.store.delListener(this.hoistListenerId);
       this.hoistListenerId = null;
     }
+    if (this.pendingRoleListenerId != null) {
+      this.store.delListener(this.pendingRoleListenerId);
+      this.pendingRoleListenerId = null;
+    }
     if (this.sync) {
       void this.sync.stop();
       this.sync.destroy();
@@ -405,6 +515,8 @@ export class TinyBaseRoomStoreClient implements RoomStore {
     }
     this.connectedRoomId = null;
     this.hostKeypair = null;
+    this.hostParticipatesAsPlayer = true;
+    this.setSelfRole('pending');
 
     // Clear any previously-synced rows so a future connect starts clean and UI
     // doesn't briefly render stale players/room data.
@@ -426,6 +538,10 @@ export class TinyBaseRoomStoreClient implements RoomStore {
       this.store.delListener(this.hoistListenerId);
       this.hoistListenerId = null;
     }
+    if (this.pendingRoleListenerId != null) {
+      this.store.delListener(this.pendingRoleListenerId);
+      this.pendingRoleListenerId = null;
+    }
     if (this.sync) {
       void this.sync.stop();
       this.sync.destroy();
@@ -433,6 +549,8 @@ export class TinyBaseRoomStoreClient implements RoomStore {
     }
     this.connectedRoomId = null;
     this.hostKeypair = null;
+    this.hostParticipatesAsPlayer = true;
+    this.selfRoleListeners.clear();
     this.store.delTables();
   }
 
@@ -445,9 +563,12 @@ export class TinyBaseRoomStoreClient implements RoomStore {
     inviteCode: string;
     hostKeypair: LoadedGameHostKeypair;
     bootstrap: HostRoomBootstrap;
+    /** When false, host does not take a player seat (moderator only). */
+    participateAsPlayer?: boolean;
   }): void {
     this.connectedRoomId = opts.roomId;
     this.hostKeypair = opts.hostKeypair;
+    this.hostParticipatesAsPlayer = opts.participateAsPlayer !== false;
     const room = this.getRoomOrNull(opts.roomId);
     if (!room) {
       writeRow(this.store, 'room', {
@@ -465,6 +586,11 @@ export class TinyBaseRoomStoreClient implements RoomStore {
         turnTimeoutMs: 0
       });
     }
+    if (!this.hostParticipatesAsPlayer) {
+      this.setSelfRole('moderator');
+      return;
+    }
+    this.setSelfRole('player');
     this.installSelfReadyHoist();
     this.upsertSelfPlayer();
     this.heartbeat = window.setInterval(() => this.upsertSelfPlayer(), HEARTBEAT_INTERVAL_MS);
@@ -491,11 +617,14 @@ export class TinyBaseRoomStoreClient implements RoomStore {
 
   private upsertSelfPlayer(): void {
     const now = Date.now();
+    const room = this.connectedRoomId ? this.getRoomOrNull(this.connectedRoomId) : null;
+    const role =
+      room && room.hostPlayerId === this.identity.playerId ? ('host' as const) : ('player' as const);
     writeRow(this.store, 'players', {
       id: this.identity.playerId,
       displayName: this.displayName,
       avatarColor: this.avatarColor,
-      role: 'player',
+      role,
       score: 0,
       isConnected: true,
       isReady: this.selfReady,
@@ -513,6 +642,9 @@ export class TinyBaseRoomStoreClient implements RoomStore {
   // pre-encrypted bytes (iv + ciphertext) or plaintext (which it will encrypt
   // to the current hostEncPubKey).
   async submit(input: SubmitInput): Promise<SubmissionId> {
+    if (this.selfRole === 'observer' || this.selfRole === 'moderator') {
+      throw new Error('submit: observers and moderator-only hosts cannot send game submissions');
+    }
     const room = this.requireConnectedRoom();
     const id = makeSubmissionId();
     const nonce = this.getNextSubmissionNonce() as SubmissionNonce;
@@ -570,6 +702,9 @@ export class TinyBaseRoomStoreClient implements RoomStore {
   }
 
   async submitLobbyChatMessage(input: { text: string }): Promise<ChatSubmissionId> {
+    if (this.selfRole === 'observer') {
+      throw new Error('submitLobbyChatMessage: observers are anonymous and cannot send chat messages');
+    }
     const room = this.requireConnectedRoom();
     const id = makeChatSubmissionId();
     const nonce = this.getNextSubmissionNonce() as SubmissionNonce;
@@ -727,9 +862,11 @@ export class TinyBaseRoomStoreClient implements RoomStore {
   }): Promise<GameExportV1> {
     this.requireHostForWrite('exportGameRecord');
     const room = this.requireConnectedRoom();
-    const hostKeypair = this.requireHostKeypair();
+    // hostKeypair fetch not needed here — decryptSubmissionForHost pulls it.
+    this.requireHostKeypair();
     const events = this.getEvents().sort((a, b) => a.seq - b.seq);
     const players = this.getPlayers();
+    const submissions = this.getSubmissions();
 
     const finalizedEvent = events.find((e) => e.kind === GAME_FINALIZED_KIND);
     const finalizedPayload = finalizedEvent?.publicPayload as
@@ -742,8 +879,34 @@ export class TinyBaseRoomStoreClient implements RoomStore {
     const outcome = (finalizedPayload?.outcome ?? 'abandoned') as 'win' | 'draw' | 'abandoned';
     const winnerPlayerIds = finalizedPayload?.winnerPlayerIds ?? [];
 
+    // Decrypt every submission so external verifiers can replay the game with
+    // a different engine implementation. The player signature on the encrypted
+    // envelope still authenticates the sender; the host attests (by signing
+    // the export) that these plaintexts are what it actually decrypted.
+    const exportSubmissions = await Promise.all(
+      submissions.map(async (s) => {
+        const plaintext = await this.decryptSubmissionForHost(s);
+        // Standard base64 (not URL-safe) for plaintext bytes.
+        let binary = '';
+        for (let i = 0; i < plaintext.length; i++) binary += String.fromCharCode(plaintext[i]!);
+        const plaintextB64 = btoa(binary);
+        return {
+          id: s.id,
+          fromPlayerId: s.fromPlayerId,
+          createdAt: s.createdAt,
+          nonce: s.nonce,
+          gameType: s.gameType,
+          kind: s.kind,
+          iv: s.iv,
+          toHostCiphertext: s.toHostCiphertext,
+          signature: s.signature,
+          plaintextB64
+        };
+      })
+    );
+
     const bundle: Omit<GameExportV1, 'exportSignature'> = {
-      exportVersion: 1,
+      exportVersion: 2,
       exportedAt: Date.now() as UnixMs,
       platform: {
         appVersion: opts.appVersion,
@@ -757,7 +920,8 @@ export class TinyBaseRoomStoreClient implements RoomStore {
         startedAt,
         finishedAt,
         outcome,
-        winnerPlayerIds
+        winnerPlayerIds,
+        hostEncPubKey: room.hostEncPubKey
       },
       players: players.map((p) => ({
         playerId: p.id,
@@ -776,7 +940,8 @@ export class TinyBaseRoomStoreClient implements RoomStore {
         publicPayload: e.publicPayload,
         fromPlayerId: e.fromPlayerId,
         hostSignature: e.hostSignature
-      }))
+      })),
+      submissions: exportSubmissions
     };
 
     const exportSignature = await signExport(this.identity.signing.privKey, bundle);
@@ -1078,47 +1243,86 @@ export class TinyBaseRoomStoreClient implements RoomStore {
       }
     });
 
-    // Seed processed-set from existing chat events. Chat events don't carry a
-    // submission ID directly, so we use (fromPlayerId, createdAt) as a stable
-    // best-effort key to avoid double-emitting on host reload. Any remaining
-    // duplicates are harmless from the player's perspective (chat is
-    // append-only) but would inflate the event log unnecessarily.
+    // Seed nonce high-water marks from existing submissions so a loop restart
+    // can't accept replays (mirrors startHostLoop's primeNonce seeding).
+    const existingSubs = this.getLobbyChatSubmissions();
+    const maxNonceByPlayer = new Map<string, number>();
+    for (const s of existingSubs) {
+      const prev = maxNonceByPlayer.get(s.fromPlayerId) ?? -1;
+      if (s.nonce > prev) maxNonceByPlayer.set(s.fromPlayerId, s.nonce);
+    }
+    for (const [playerId, nonce] of maxNonceByPlayer) {
+      validator.primeNonce(playerId as never, nonce);
+    }
+
+    // Processed set uses submission IDs. Seed it from existing submissions so
+    // we don't duplicate events on restart (their nonces are already below the
+    // high-water mark, so the nonce check alone would reject them — but an ID
+    // check is cheaper and avoids async crypto for known-old subs).
     const processed = new Set<string>();
-    for (const e of this.getLobbyChatEvents()) {
-      processed.add(`${e.fromPlayerId}:${e.createdAt}`);
+    for (const s of existingSubs) {
+      processed.add(s.id);
     }
 
     let stopped = false;
-    const unsubscribe = this.onLobbyChatSubmissionsChanged((subs) => {
-      if (stopped) return;
-      void (async () => {
-        for (const s of subs) {
-          if (stopped) return;
-          const key = `${s.fromPlayerId}:${s.createdAt}`;
-          if (processed.has(key)) continue;
-          processed.add(key);
 
-          const ok = await validator.validate(s);
-          if (!ok.ok) continue;
+    const processSubs = async (subs: LobbyChatSubmission[]) => {
+      for (const s of subs) {
+        if (stopped) return;
+        if (processed.has(s.id)) continue;
 
-          const msg = await this.decryptLobbyChatSubmissionForHost(s);
-          const existing = this.getLobbyChatEvents();
-          const maxSeq = existing.reduce((m, e) => (e.seq > m ? e.seq : m), -1);
-          const seq = (maxSeq + 1) as EventSeq;
-          await this.writeLobbyChatEvent({
-            seq,
-            createdAt: Date.now() as UnixMs,
-            fromPlayerId: s.fromPlayerId,
-            text: msg.text
-          });
+        const ok = await validator.validate(s);
+        if (!ok.ok) {
+          if (ok.reason !== 'unknown_player') {
+            // Security rejection (bad sig / replay): don't retry.
+            processed.add(s.id);
+          }
+          // unknown_player: player row may not have synced yet — leave out of
+          // processed so it gets retried when onPlayersChanged fires.
+          continue;
         }
-      })();
+
+        let msg: { text: string };
+        try {
+          msg = await this.decryptLobbyChatSubmissionForHost(s);
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.error('chat host loop: decryption failed, dropping submission', err);
+          processed.add(s.id);
+          continue;
+        }
+
+        processed.add(s.id);
+
+        const existing = this.getLobbyChatEvents();
+        const maxSeq = existing.reduce((m, e) => (e.seq > m ? e.seq : m), -1);
+        const seq = (maxSeq + 1) as EventSeq;
+        await this.writeLobbyChatEvent({
+          seq,
+          createdAt: Date.now() as UnixMs,
+          fromPlayerId: s.fromPlayerId,
+          text: msg.text
+        });
+      }
+    };
+
+    const unsubSubs = this.onLobbyChatSubmissionsChanged((subs) => {
+      if (stopped) return;
+      void processSubs(subs);
+    });
+
+    // Retry unknown_player failures when new player rows arrive — a chat
+    // submission can arrive before the sender's player row is synced.
+    const unsubPlayers = this.onPlayersChanged(() => {
+      if (stopped) return;
+      void processSubs(this.getLobbyChatSubmissions());
     });
 
     const handle: HostLoopHandle = {
       stop: () => {
         stopped = true;
-        unsubscribe();
+        unsubSubs();
+        unsubPlayers();
       }
     };
     this.chatHostLoop = handle;

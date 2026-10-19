@@ -1,12 +1,19 @@
+import { execSync } from 'child_process';
 import react from '@vitejs/plugin-react';
 import { TanStackRouterVite } from '@tanstack/router-plugin/vite';
 import { defineConfig } from 'vite';
 
 function computeBase(): string {
-  // GitHub Pages Project Pages deploy at "/<repo>/".
-  // In GitHub Actions, GITHUB_REPOSITORY is "<owner>/<repo>".
   const repo = process.env.GITHUB_REPOSITORY?.split('/')[1];
   return repo ? `/${repo}/` : '/';
+}
+
+function getGitSha(): string {
+  try {
+    return execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim();
+  } catch {
+    return 'unknown';
+  }
 }
 
 export default defineConfig(({ mode }) => ({
@@ -17,6 +24,10 @@ export default defineConfig(({ mode }) => ({
   base: mode === 'production' ? computeBase() : '/',
   server: {
     port: 5173
+  },
+  define: {
+    __APP_GIT_SHA__: JSON.stringify(getGitSha()),
+    __APP_BUILD_TIME__: JSON.stringify(new Date().toISOString())
   }
 }));
 

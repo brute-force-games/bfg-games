@@ -159,6 +159,12 @@ export class HostLobbyChatValidator {
     this.getPlayerSigningPubKey = opts.getPlayerSigningPubKey;
   }
 
+  /** Seed the per-player nonce high-water mark to prevent replays on restart. */
+  primeNonce(playerId: PlayerId, nonce: number): void {
+    const current = this.lastAcceptedNonce.get(playerId) ?? -1;
+    if (nonce > current) this.lastAcceptedNonce.set(playerId, nonce);
+  }
+
   async validate(submission: LobbyChatSubmission): Promise<LobbyChatValidationResult> {
     const pubKey = this.getPlayerSigningPubKey(submission.fromPlayerId);
     if (!pubKey) return { ok: false, reason: 'unknown_player' };

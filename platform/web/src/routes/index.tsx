@@ -22,10 +22,11 @@ function IndexRoute() {
   return (
     <div style={{ maxWidth: 720, margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <h1 style={{ margin: 0 }}>Acronym Game</h1>
+        <h1 style={{ margin: 0 }}>Brute Force Games</h1>
         <div style={{ display: 'flex', gap: 12 }}>
           <Link to="/review">Review</Link>
           <Link to="/settings">Settings</Link>
+          <Link to="/about">About</Link>
         </div>
       </div>
 

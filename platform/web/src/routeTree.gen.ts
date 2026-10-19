@@ -11,8 +11,15 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ReviewRouteImport } from './routes/review'
+import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as RoomRoomIdRouteImport } from './routes/room.$roomId'
+import { Route as RoomRoomIdSpectateRouteImport } from './routes/room.$roomId.spectate'
 import { Route as RoomRoomIdPlayRouteImport } from './routes/room.$roomId.play'
+import { Route as RoomRoomIdObserveRouteImport } from './routes/room.$roomId.observe'
+import { Route as RoomRoomIdMonitorRouteImport } from './routes/room.$roomId.monitor'
+import { Route as RoomRoomIdHostRouteImport } from './routes/room.$roomId.host'
+import { Route as RoomRoomIdArchiveRouteImport } from './routes/room.$roomId.archive'
 
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
@@ -24,49 +31,140 @@ const ReviewRoute = ReviewRouteImport.update({
   path: '/review',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AboutRoute = AboutRouteImport.update({
+  id: '/about',
+  path: '/about',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const RoomRoomIdPlayRoute = RoomRoomIdPlayRouteImport.update({
-  id: '/room/$roomId/play',
-  path: '/room/$roomId/play',
+const RoomRoomIdRoute = RoomRoomIdRouteImport.update({
+  id: '/room/$roomId',
+  path: '/room/$roomId',
   getParentRoute: () => rootRouteImport,
+} as any)
+const RoomRoomIdSpectateRoute = RoomRoomIdSpectateRouteImport.update({
+  id: '/spectate',
+  path: '/spectate',
+  getParentRoute: () => RoomRoomIdRoute,
+} as any)
+const RoomRoomIdPlayRoute = RoomRoomIdPlayRouteImport.update({
+  id: '/play',
+  path: '/play',
+  getParentRoute: () => RoomRoomIdRoute,
+} as any)
+const RoomRoomIdObserveRoute = RoomRoomIdObserveRouteImport.update({
+  id: '/observe',
+  path: '/observe',
+  getParentRoute: () => RoomRoomIdRoute,
+} as any)
+const RoomRoomIdMonitorRoute = RoomRoomIdMonitorRouteImport.update({
+  id: '/monitor',
+  path: '/monitor',
+  getParentRoute: () => RoomRoomIdRoute,
+} as any)
+const RoomRoomIdHostRoute = RoomRoomIdHostRouteImport.update({
+  id: '/host',
+  path: '/host',
+  getParentRoute: () => RoomRoomIdRoute,
+} as any)
+const RoomRoomIdArchiveRoute = RoomRoomIdArchiveRouteImport.update({
+  id: '/archive',
+  path: '/archive',
+  getParentRoute: () => RoomRoomIdRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
   '/review': typeof ReviewRoute
   '/settings': typeof SettingsRoute
+  '/room/$roomId': typeof RoomRoomIdRouteWithChildren
+  '/room/$roomId/archive': typeof RoomRoomIdArchiveRoute
+  '/room/$roomId/host': typeof RoomRoomIdHostRoute
+  '/room/$roomId/monitor': typeof RoomRoomIdMonitorRoute
+  '/room/$roomId/observe': typeof RoomRoomIdObserveRoute
   '/room/$roomId/play': typeof RoomRoomIdPlayRoute
+  '/room/$roomId/spectate': typeof RoomRoomIdSpectateRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
   '/review': typeof ReviewRoute
   '/settings': typeof SettingsRoute
+  '/room/$roomId': typeof RoomRoomIdRouteWithChildren
+  '/room/$roomId/archive': typeof RoomRoomIdArchiveRoute
+  '/room/$roomId/host': typeof RoomRoomIdHostRoute
+  '/room/$roomId/monitor': typeof RoomRoomIdMonitorRoute
+  '/room/$roomId/observe': typeof RoomRoomIdObserveRoute
   '/room/$roomId/play': typeof RoomRoomIdPlayRoute
+  '/room/$roomId/spectate': typeof RoomRoomIdSpectateRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
   '/review': typeof ReviewRoute
   '/settings': typeof SettingsRoute
+  '/room/$roomId': typeof RoomRoomIdRouteWithChildren
+  '/room/$roomId/archive': typeof RoomRoomIdArchiveRoute
+  '/room/$roomId/host': typeof RoomRoomIdHostRoute
+  '/room/$roomId/monitor': typeof RoomRoomIdMonitorRoute
+  '/room/$roomId/observe': typeof RoomRoomIdObserveRoute
   '/room/$roomId/play': typeof RoomRoomIdPlayRoute
+  '/room/$roomId/spectate': typeof RoomRoomIdSpectateRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/review' | '/settings' | '/room/$roomId/play'
+  fullPaths:
+    | '/'
+    | '/about'
+    | '/review'
+    | '/settings'
+    | '/room/$roomId'
+    | '/room/$roomId/archive'
+    | '/room/$roomId/host'
+    | '/room/$roomId/monitor'
+    | '/room/$roomId/observe'
+    | '/room/$roomId/play'
+    | '/room/$roomId/spectate'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/review' | '/settings' | '/room/$roomId/play'
-  id: '__root__' | '/' | '/review' | '/settings' | '/room/$roomId/play'
+  to:
+    | '/'
+    | '/about'
+    | '/review'
+    | '/settings'
+    | '/room/$roomId'
+    | '/room/$roomId/archive'
+    | '/room/$roomId/host'
+    | '/room/$roomId/monitor'
+    | '/room/$roomId/observe'
+    | '/room/$roomId/play'
+    | '/room/$roomId/spectate'
+  id:
+    | '__root__'
+    | '/'
+    | '/about'
+    | '/review'
+    | '/settings'
+    | '/room/$roomId'
+    | '/room/$roomId/archive'
+    | '/room/$roomId/host'
+    | '/room/$roomId/monitor'
+    | '/room/$roomId/observe'
+    | '/room/$roomId/play'
+    | '/room/$roomId/spectate'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AboutRoute: typeof AboutRoute
   ReviewRoute: typeof ReviewRoute
   SettingsRoute: typeof SettingsRoute
-  RoomRoomIdPlayRoute: typeof RoomRoomIdPlayRoute
+  RoomRoomIdRoute: typeof RoomRoomIdRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -85,6 +183,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ReviewRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/about': {
+      id: '/about'
+      path: '/about'
+      fullPath: '/about'
+      preLoaderRoute: typeof AboutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -92,21 +197,86 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/room/$roomId': {
+      id: '/room/$roomId'
+      path: '/room/$roomId'
+      fullPath: '/room/$roomId'
+      preLoaderRoute: typeof RoomRoomIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/room/$roomId/spectate': {
+      id: '/room/$roomId/spectate'
+      path: '/spectate'
+      fullPath: '/room/$roomId/spectate'
+      preLoaderRoute: typeof RoomRoomIdSpectateRouteImport
+      parentRoute: typeof RoomRoomIdRoute
+    }
     '/room/$roomId/play': {
       id: '/room/$roomId/play'
-      path: '/room/$roomId/play'
+      path: '/play'
       fullPath: '/room/$roomId/play'
       preLoaderRoute: typeof RoomRoomIdPlayRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof RoomRoomIdRoute
+    }
+    '/room/$roomId/observe': {
+      id: '/room/$roomId/observe'
+      path: '/observe'
+      fullPath: '/room/$roomId/observe'
+      preLoaderRoute: typeof RoomRoomIdObserveRouteImport
+      parentRoute: typeof RoomRoomIdRoute
+    }
+    '/room/$roomId/monitor': {
+      id: '/room/$roomId/monitor'
+      path: '/monitor'
+      fullPath: '/room/$roomId/monitor'
+      preLoaderRoute: typeof RoomRoomIdMonitorRouteImport
+      parentRoute: typeof RoomRoomIdRoute
+    }
+    '/room/$roomId/host': {
+      id: '/room/$roomId/host'
+      path: '/host'
+      fullPath: '/room/$roomId/host'
+      preLoaderRoute: typeof RoomRoomIdHostRouteImport
+      parentRoute: typeof RoomRoomIdRoute
+    }
+    '/room/$roomId/archive': {
+      id: '/room/$roomId/archive'
+      path: '/archive'
+      fullPath: '/room/$roomId/archive'
+      preLoaderRoute: typeof RoomRoomIdArchiveRouteImport
+      parentRoute: typeof RoomRoomIdRoute
     }
   }
 }
 
+interface RoomRoomIdRouteChildren {
+  RoomRoomIdArchiveRoute: typeof RoomRoomIdArchiveRoute
+  RoomRoomIdHostRoute: typeof RoomRoomIdHostRoute
+  RoomRoomIdMonitorRoute: typeof RoomRoomIdMonitorRoute
+  RoomRoomIdObserveRoute: typeof RoomRoomIdObserveRoute
+  RoomRoomIdPlayRoute: typeof RoomRoomIdPlayRoute
+  RoomRoomIdSpectateRoute: typeof RoomRoomIdSpectateRoute
+}
+
+const RoomRoomIdRouteChildren: RoomRoomIdRouteChildren = {
+  RoomRoomIdArchiveRoute: RoomRoomIdArchiveRoute,
+  RoomRoomIdHostRoute: RoomRoomIdHostRoute,
+  RoomRoomIdMonitorRoute: RoomRoomIdMonitorRoute,
+  RoomRoomIdObserveRoute: RoomRoomIdObserveRoute,
+  RoomRoomIdPlayRoute: RoomRoomIdPlayRoute,
+  RoomRoomIdSpectateRoute: RoomRoomIdSpectateRoute,
+}
+
+const RoomRoomIdRouteWithChildren = RoomRoomIdRoute._addFileChildren(
+  RoomRoomIdRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AboutRoute: AboutRoute,
   ReviewRoute: ReviewRoute,
   SettingsRoute: SettingsRoute,
-  RoomRoomIdPlayRoute: RoomRoomIdPlayRoute,
+  RoomRoomIdRoute: RoomRoomIdRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

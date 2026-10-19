@@ -43,7 +43,12 @@ export const zLocalRoomRoleHost = z.object({
   hostPlayerId: zPlayerId,
   hostKeypair: zGameHostKeypair,
   bootstrap: zHostRoomBootstrap.nullable(),
-  createdAt: zUnixMs
+  createdAt: zUnixMs,
+  /**
+   * When false, the host does not occupy a player seat (moderator / TD only).
+   * Defaults to true when omitted (host plays at the table).
+   */
+  participatesAsPlayer: z.boolean().optional()
 });
 export type LocalRoomRoleHost = z.infer<typeof zLocalRoomRoleHost>;
 

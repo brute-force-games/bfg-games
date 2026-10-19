@@ -13,8 +13,7 @@
   "dependencies": {
     "@brute-force-games/multiplayer-types": "file:../multiplayer-types",
     "@brute-force-games/shared-types": "file:../shared-types",
-    "tinybase": "^8.2.0",
+    "tinybase": "^8.3.0",
     "zod": "^4.3.6"
   }
 }
-

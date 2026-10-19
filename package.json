@@ -1,5 +1,5 @@
 {
-  "name": "acronym-game",
+  "name": "brute-force-games",
   "private": true,
   "workspaces": [
     "platform/*"

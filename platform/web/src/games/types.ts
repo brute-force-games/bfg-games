@@ -1,6 +1,8 @@
 import type { ComponentType, ReactNode } from 'react';
 import type { ZodType } from 'zod';
 
+import type { UserGameRole } from '@brute-force-games/shared-types';
+
 import type {
   GameType,
   HostLoopAction,
@@ -127,6 +129,8 @@ export type PlayerUIProps<TConfig> = {
   selfPlayerId: PlayerId;
   players: ReadonlyArray<Player>;
   config: TConfig;
+  /** Optional; engines may ignore until they branch on role. */
+  userGameRole?: UserGameRole;
 };
 
 export type GodotBridgeAdapter<TConfig, TState> = {
@@ -233,5 +237,6 @@ export type RenderPlayerUIArgs = {
   room: Room;
   selfPlayerId: PlayerId;
   players: ReadonlyArray<Player>;
+  userGameRole?: UserGameRole;
   fallback?: ReactNode;
 };

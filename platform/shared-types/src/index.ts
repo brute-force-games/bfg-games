@@ -4,6 +4,7 @@ export * from './core/ids';
 export * from './core/keys';
 export * from './core/identity';
 export * from './core/encryption';
+export * from './core/decrypt-outcome';
 export * from './core/schemas';
 export * from './core/shared-state';
 export * from './core/store';
@@ -17,6 +18,7 @@ export * from './core/preferences';
 export * from './core/bridge-events';
 export * from './core/bridge';
 export * from './core/local-room-role';
+export * from './core/user-game-role';
 
 export * from './games/tictactoe/schemas';
 export * from './games/tictactoe/bridge-events';

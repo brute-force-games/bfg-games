@@ -33,7 +33,8 @@ import { generateInviteCode, makeRoomId } from '../utils/invite';
 
 import { WebLocalStore } from './localStore';
 
-export type SelfRoomRole = 'host' | 'player' | 'observer' | 'unknown';
+/** Per rooms index: local host vs non-host; separate from `RoomSessionRole`. */
+export type RoomsIndexSelfRole = 'host' | 'player' | 'observer' | 'unknown';
 
 export type RoomsIndexRow = {
   roomId: RoomId;
@@ -43,7 +44,7 @@ export type RoomsIndexRow = {
   roomStatus: RoomStatus | 'unknown';
   gameType: GameType | 'unknown';
   hostPlayerId: string;
-  selfRole: SelfRoomRole;
+  selfRole: RoomsIndexSelfRole;
 };
 
 type SyncContextValue = {
@@ -69,6 +70,8 @@ type SyncContextValue = {
     maxPlayers?: number;
     /** Seed for deterministic RNG — use generateRoomSeed() for a random game. */
     seed: RoomSeed;
+    /** When false, host is moderator-only (no player seat). Default true. */
+    participatesAsPlayer?: boolean;
   }) => Promise<{ roomId: RoomId; invite: string; role: LocalRoomRoleHost }>;
   /** Returns the persisted local role for `roomId`, or null. */
   getRoleForRoom: (roomId: RoomId) => LocalRoomRole | null;
@@ -76,6 +79,8 @@ type SyncContextValue = {
   loadHostKeypairForRoom: (roomId: RoomId) => Promise<LoadedGameHostKeypair | null>;
   /** Forgets the local role for a room (does NOT modify any synced state). */
   forgetRoleForRoom: (roomId: RoomId) => void;
+  /** Returns all persisted local role records (across sessions). */
+  listLocalRoles: () => LocalRoomRole[];
 };
 
 const Ctx = createContext<SyncContextValue | null>(null);
@@ -190,7 +195,7 @@ export function SyncProvider(props: { children: React.ReactNode }) {
 
   // selfRole comes from the local role tracker (never the synced room row).
   const computeSelfRoleForRoom = useCallback(
-    (roomId: RoomId, currentIdentity: LoadedPlayerIdentity): SelfRoomRole => {
+    (roomId: RoomId, currentIdentity: LoadedPlayerIdentity): RoomsIndexSelfRole => {
       const role = roleTracker.get(roomId);
       if (role?.kind === 'host' && role.hostPlayerId === currentIdentity.playerId) return 'host';
       return 'player';
@@ -317,7 +322,8 @@ export function SyncProvider(props: { children: React.ReactNode }) {
         hostPlayerId: b.identity.playerId,
         hostKeypair,
         bootstrap: bootstrapHints,
-        createdAt: Date.now()
+        createdAt: Date.now(),
+        ...(input.participatesAsPlayer === false ? { participatesAsPlayer: false } : {})
       });
       roleTracker.set(role);
 
@@ -342,7 +348,8 @@ export function SyncProvider(props: { children: React.ReactNode }) {
         roomId,
         inviteCode: invite,
         hostKeypair: loadedHostKeypair,
-        bootstrap: bootstrapHints
+        bootstrap: bootstrapHints,
+        participateAsPlayer: role.participatesAsPlayer !== false
       });
 
       touchRoomIndex(roomId, {
@@ -373,7 +380,8 @@ export function SyncProvider(props: { children: React.ReactNode }) {
     createHostedRoom,
     getRoleForRoom,
     loadHostKeypairForRoom,
-    forgetRoleForRoom
+    forgetRoleForRoom,
+    listLocalRoles: () => roleTracker.list()
   };
 
   return <Ctx.Provider value={value}>{props.children}</Ctx.Provider>;
